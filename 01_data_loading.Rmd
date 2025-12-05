@@ -1,0 +1,149 @@
+---
+title: "Phase 1: Data Loading and Initial Exploration"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "2025-11-26"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 1 of the project: Data Loading and Initial Exploration. In this phase, we load the hospital readmissions dataset, examine its structure, identify missing values, and create initial visualizations.
+
+# Data Loading
+
+```{r load-data, echo=FALSE,comment=""}
+
+data <- read.csv("hospital_readmissions.csv", stringsAsFactors = FALSE)
+
+cat("\nDataset Dimensions:\n")
+cat("Rows (observations):", nrow(data), "\n")
+cat("Columns (variables):", ncol(data), "\n")
+```
+
+# Dataset Structure
+
+```{r structure, echo=FALSE,comment=""}
+
+str(data)
+
+cat("\n Column Names \n")
+colnames(data)
+
+cat("\n Data Types Summary \n")
+data_types <- sapply(data, class)
+table(data_types)
+```
+
+# Missing Values Analysis
+
+```{r missing-values, echo=FALSE, comment=""}
+
+# Count missing values per column
+missing_count <- sapply(data, function(x) sum(is.na(x) | x == "" | x == "Missing"))
+missing_df <- data.frame(
+  Variable = names(missing_count),
+  Missing_Count = missing_count,
+  Missing_Percentage = round(missing_count / nrow(data) * 100, 2)
+)
+
+# Filter to show only columns with missing values
+missing_df_filtered <- missing_df[missing_df$Missing_Count > 0, ]
+if(nrow(missing_df_filtered) > 0) {
+  cat("\nColumns with missing values:\n")
+  kable(missing_df_filtered, caption = "Missing Values Summary")
+} else {
+  cat("\nNo missing values found!\n")
+}
+```
+
+# Summary Statistics
+
+```{r summary-stats, echo=FALSE, comment=""}
+
+# Numerical variables
+numerical_vars <- c("time_in_hospital", "n_lab_procedures", "n_procedures", 
+                    "n_medications", "n_outpatient", "n_inpatient", "n_emergency")
+numerical_vars <- numerical_vars[numerical_vars %in% colnames(data)]
+
+cat("\n Numerical Variables Summary \n")
+if(length(numerical_vars) > 0) {
+  numerical_summary <- data %>%
+    select(all_of(numerical_vars)) %>%
+    summary()
+  print(numerical_summary)
+}
+```
+
+```{r histograms, fig.cap="Distribution of Numerical Variables", echo=FALSE,comment=""}
+if(length(numerical_vars) > 0) {
+  data_long <- data %>%
+    select(all_of(numerical_vars)) %>%
+    pivot_longer(everything(), names_to = "variable", values_to = "value")
+  
+p2<- ggplot(data_long, aes(x = value)) +
+    geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+    facet_wrap(~ variable, scales = "free") +
+    labs(title = "Distribution of Numerical Variables",
+         x = "Value",
+         y = "Frequency") +
+    theme_minimal()
+print(p2)
+  
+}
+```
+# Response Variable Distribution
+
+```{r response-variable, echo=FALSE,comment=""}
+# Check unique values
+cat("\nUnique values in 'readmitted' column:\n")
+print(unique(data$readmitted))
+readmitted_table <- table(data$readmitted)
+print(readmitted_table)
+
+# Calculate proportions
+readmitted_prop <- prop.table(readmitted_table)
+cat("\nProportions:\n")
+print(round(readmitted_prop * 100, 2))
+```
+
+
+
+```{r readmission-plot, fig.cap="Distribution of Readmitted Patients", echo=FALSE, comment=""}
+p1 <- ggplot(data, aes(x = readmitted, fill = readmitted)) +
+  geom_bar() +
+  scale_fill_manual(values = c("no" = "lightcoral", "yes" = "lightblue"),
+                    labels = c("no" = "No", "yes" = "Yes")) +
+  labs(title = "Distribution of Readmitted Patients",
+       x = "Readmitted",
+       y = "Count",
+       fill = "Readmitted") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
+print(p1)
+```
+
+
+
+# Summary
+
+This phase successfully loaded and explored the dataset. Key findings:
+
+- **Dataset size**: 25,000 observations, 17 variables
+- **Response variable**: Binary (yes/no) with 47.02% readmission rate
+- **Missing values**: Found in medical_specialty (49.53%), diag_1 (0.02%), diag_2 (0.17%), diag_3 (0.78%)
+- **Data types**: 10 categorical, 7 numerical variables
+
+

@@ -1,0 +1,7 @@
+"","time_in_hospital","n_lab_procedures"," n_procedures","n_medications"
+"","Min.   : 1.000  ","Min.   :  1.00  ","Min.   :0.000  ","Min.   : 1.00  "
+"","1st Qu.: 2.000  ","1st Qu.: 31.00  ","1st Qu.:0.000  ","1st Qu.:11.00  "
+"","Median : 4.000  ","Median : 44.00  ","Median :1.000  ","Median :15.00  "
+"","Mean   : 4.453  ","Mean   : 43.24  ","Mean   :1.352  ","Mean   :16.25  "
+"","3rd Qu.: 6.000  ","3rd Qu.: 57.00  ","3rd Qu.:2.000  ","3rd Qu.:20.00  "
+"","Max.   :14.000  ","Max.   :113.00  ","Max.   :6.000  ","Max.   :79.00  "

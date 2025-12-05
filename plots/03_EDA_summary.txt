@@ -1,0 +1,18 @@
+Phase 3: Exploratory Data Analysis Summary
+==========================================
+
+Dataset: 24996 observations
+Readmission Rate: 47.02%
+
+Visualizations Created:
+- Boxplots for numerical variables
+- Grouped and stacked bar charts for categorical variables
+- Correlation heatmap
+- Readmission rate comparisons
+
+Statistical Tests:
+- T-tests for numerical variables
+- Chi-square tests for categorical variables
+
+All outputs saved in 'plots/' directory
+

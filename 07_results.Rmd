@@ -1,0 +1,157 @@
+---
+title: "Phase 7: Results and Reporting"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
+                      fig.width = 10, fig.height = 6, fig.align = "center")
+library(ggplot2)
+library(dplyr)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 7: Results and Reporting. This phase consolidates all findings, creates a comprehensive summary, and prepares the final project documentation.
+
+# Load All Results
+
+```{r load-results}
+cat("=== Phase 7: Results and Reporting ===\n\n")
+
+# Load comparison results
+model_comparison <- read.csv("plots/06_model_comparison.csv")
+model_justification <- read.csv("plots/06_model_justification.csv")
+metrics_logistic <- read.csv("plots/04_performance_metrics.csv")
+metrics_cart <- read.csv("plots/05_performance_metrics.csv")
+regression_output <- read.csv("plots/04_regression_output.csv")
+var_importance <- read.csv("plots/05_variable_importance.csv")
+r2_values <- read.csv("plots/04_rsquared.csv")
+auc_logistic <- read.csv("plots/04_auc.csv")
+auc_cart <- read.csv("plots/05_auc.csv")
+
+cat("All results loaded successfully\n")
+```
+
+# Final Summary
+
+## Model Performance Summary
+
+```{r performance-summary}
+cat("=== Model Performance Summary ===\n\n")
+
+summary_table <- data.frame(
+  Model = c("Logistic Regression", "CART"),
+  Accuracy = c(
+    round(metrics_logistic$Percentage[metrics_logistic$Metric == "Accuracy"], 2),
+    round(metrics_cart$Percentage[metrics_cart$Metric == "Accuracy"], 2)
+  ),
+  AUC = c(
+    round(auc_logistic$Value, 4),
+    round(auc_cart$Value, 4)
+  ),
+  Precision = c(
+    round(metrics_logistic$Percentage[metrics_logistic$Metric == "Precision"], 2),
+    round(metrics_cart$Percentage[metrics_cart$Metric == "Precision"], 2)
+  ),
+  Recall = c(
+    round(metrics_logistic$Percentage[metrics_logistic$Metric == "Recall (Sensitivity)"], 2),
+    round(metrics_cart$Percentage[metrics_cart$Metric == "Recall (Sensitivity)"], 2)
+  )
+)
+
+kable(summary_table, caption = "Final Model Performance Summary")
+```
+
+## Top Predictors
+
+```{r top-predictors}
+cat("=== Top Predictors ===\n\n")
+
+cat("**Logistic Regression (by Odds Ratio):**\n")
+top_predictors <- head(regression_output[order(-regression_output$Odds_Ratio), ], 5)
+kable(top_predictors[, c("Variable", "Odds_Ratio", "P_Value")],
+      caption = "Top 5 Predictors: Logistic Regression")
+
+cat("\n**CART (by Importance):**\n")
+top_cart <- head(var_importance, 5)
+kable(top_cart[, c("Variable", "Importance_Percent")],
+      caption = "Top 5 Predictors: CART")
+```
+
+# Key Findings
+
+```{r key-findings}
+cat("=== Key Findings ===\n\n")
+
+cat("1. **Previous hospital visits are the strongest predictor** of readmission\n")
+cat("2. **Age groups 70-80 and 80-90** show higher readmission risk\n")
+cat("3. **Medical specialty** (especially Cardiology) is associated with readmission\n")
+cat("4. **Both models show moderate performance** (AUC < 0.7)\n")
+cat("5. **Logistic Regression** provides more detailed statistical insights\n")
+cat("6. **CART** offers superior simplicity and interpretability\n")
+```
+
+# Limitations
+
+```{r limitations}
+cat("=== Limitations ===\n\n")
+
+cat("1. Moderate predictive performance (AUC < 0.7)\n")
+cat("2. Missing important clinical variables (lab results, vital signs)\n")
+cat("3. Data from 1999-2008 may not reflect current practices\n")
+cat("4. High missing data in medical_specialty (49.53%)\n")
+cat("5. CART model may be underfitting (very simple tree)\n")
+```
+
+# Recommendations
+
+```{r recommendations}
+cat("=== Recommendations ===\n\n")
+
+cat("1. Include additional clinical variables for better predictions\n")
+cat("2. Consider ensemble methods (Random Forest, Gradient Boosting)\n")
+cat("3. Collect more recent data if possible\n")
+cat("4. Use Logistic Regression for detailed risk assessment\n")
+cat("5. Use CART for simple screening tools\n")
+cat("6. Validate models on external datasets before clinical use\n")
+```
+
+# Project Completion
+
+```{r completion}
+cat("=== Project Completion Status ===\n\n")
+
+cat("✓ Phase 1: Data Loading - COMPLETE\n")
+cat("✓ Phase 2: Data Cleaning - COMPLETE\n")
+cat("✓ Phase 3: Exploratory Data Analysis - COMPLETE\n")
+cat("✓ Phase 4: Logistic Regression - COMPLETE\n")
+cat("✓ Phase 5: CART - COMPLETE\n")
+cat("✓ Phase 6: Model Comparison - COMPLETE\n")
+cat("✓ Phase 7: Results and Reporting - COMPLETE\n\n")
+
+cat("**PROJECT STATUS: COMPLETE**\n")
+cat("All phases completed successfully. Ready for final report generation.\n")
+```
+
+# Summary
+
+This phase consolidates all project findings:
+
+- **Both models** successfully built and evaluated
+- **Model comparison** completed with clear recommendations
+- **Key predictors** identified and documented
+- **Limitations and recommendations** clearly stated
+- **Project ready** for final report submission
+
+All analysis phases are complete. The master R Markdown report (`PROJECT_REPORT.Rmd`) combines all findings into a comprehensive document ready for submission.
+

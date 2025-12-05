@@ -1,0 +1,292 @@
+---
+title: "Phase 2: Data Cleaning and Preprocessing"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "2025-11-28"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 2: Data Cleaning and Preprocessing. In this phase, we clean the response variable, handle missing values, perform feature engineering, and prepare datasets for both Logistic Regression and CART models.
+
+# Load Original Data
+
+```{r load-data, echo=FALSE, comment=""}
+
+data <- read.csv("hospital_readmissions.csv", stringsAsFactors = FALSE)
+cat("Original dataset: ", nrow(data), " observations, ", ncol(data), " variables\n\n")
+```
+
+# Clean Response Variable
+
+```{r clean-response, echo=FALSE, comment=""}
+# Check current distribution
+cat("\nOriginal readmitted distribution:\n")
+print(table(data$readmitted))
+
+# Convert to binary (1 = Readmitted, 0 = Not Readmitted)
+data$readmitted_binary <- as.numeric(data$readmitted == "yes")
+
+# Verify conversion
+cat("\nBinary conversion readmitted distribution:\n")
+print(table(data$readmitted_binary))
+print(prop.table(table(data$readmitted_binary)))
+```
+
+# Handle Missing Values
+
+```{r handle-missing, echo=FALSE, comment=""}
+# Check missing values before cleaning
+cat("Missing values before cleaning:\n")
+missing_before <- sapply(data, function(x) sum(is.na(x) | x == "" | x == "Missing"))
+missing_before_df <- data.frame(
+  Variable = names(missing_before),
+  Missing_Count = missing_before,
+  Missing_Percentage = round(missing_before / nrow(data) * 100, 2)
+)
+missing_before_df <- missing_before_df[missing_before_df$Missing_Count > 0, ]
+kable(missing_before_df, caption = "Missing Values Before Cleaning")
+
+# Drop rows with missing diag_1
+cat("\n--- Dropping rows with missing diag_1 ---\n")
+rows_before <- nrow(data)
+data_clean <- data[data$diag_1 != "Missing", ]
+rows_after <- nrow(data_clean)
+rows_dropped <- rows_before - rows_after
+
+cat("Rows before: ", rows_before, "\n")
+cat("Rows after: ", rows_after, "\n")
+cat("Rows dropped: ", rows_dropped, " (", round(rows_dropped/rows_before*100, 2), "%)\n")
+```
+- We are only going to drop missing data from diag_1 because it only contains 4 missing rows, and since it is the main diagnosis it means we cant assume no medication was given.
+- medical_speciality has mor than 12k (49.53%) of missing data and we will not drop it as it valuable data showing that the responsible doctors has no speciality at the time of treatment.
+- diag_2 and diag_3 have significant missing data and we are not droping them as this again is important information that shows that patient did recieve the main diagnosis but might not have been treated for 2 or 3 diagnosis.
+
+# Feature Engineering
+
+```{r feature-engineering, echo=FALSE, comment=""}
+
+# Number of diagnoses
+data_clean$n_diagnoses <- 3 - 
+  (data_clean$diag_1 == "Missing") - 
+  (data_clean$diag_2 == "Missing") - 
+  (data_clean$diag_3 == "Missing")
+
+cat("Added column to show number of diagnoses distribution:\n")
+print(table(data_clean$n_diagnoses))
+cat("Table shows that: \n")
+cat("- 24 779 patients had 3 diagnosis \n")
+cat("- 196 patients had 2 diagnosis \n")
+cat("- 21 patients had 1 diagnosis \n")
+# Medications per day
+data_clean$medications_per_day <- ifelse(data_clean$time_in_hospital > 0,
+                                         data_clean$n_medications / data_clean$time_in_hospital,
+                                         data_clean$n_medications)
+
+cat("Added Medications per day to capture treatment intensity eg: \n")
+cat("- 20 medications over 2 days = 10/day (high intensity) \n
+- 20 medications over 10 days = 2/day (lower intensity)")
+# Total previous visits
+data_clean$total_previous_visits <- data_clean$n_outpatient + 
+                                     data_clean$n_inpatient + 
+                                     data_clean$n_emergency
+cat("Added  Total previous visits with formula: \n 
+n_outpatient + n_inpatient + n_emergency \n
+- Sums all previous visit types into one variable. \n
+- Frequent users may have higher readmission risk")
+
+```
+
+# Feature Selection
+
+```{r feature-selection, echo=FALSE,comment=""}
+
+# Selected variables (from proposal + additional clinically relevant variables)
+selected_categorical <- c("age", "medical_specialty", "diag_1", "change", "diabetes_med", 
+                          "glucose_test", "A1Ctest")
+selected_numerical <- c("time_in_hospital", "n_lab_procedures", "n_procedures", "n_medications")
+
+cat("Selected variables:\n")
+cat("  Categorical: ", paste(selected_categorical, collapse = ", "), "\n")
+cat("  Numerical: ", paste(selected_numerical, collapse = ", "), "\n")
+```
+
+# Encode Variables for Models
+
+## Encoding for Logistic Regression (Dummy Encoding)
+
+```{r encoding-logistic, echo=FALSE, comment=""}
+
+# Binary variables - convert to 0/1
+data_logistic <- data_clean %>%
+  mutate(
+    change_binary = as.numeric(change == "yes"),
+    diabetes_med_binary = as.numeric(diabetes_med == "yes")
+  )
+
+cat("Binary variables converted:\n")
+cat("  change_binary: ", sum(data_logistic$change_binary), " 'yes' values\n")
+cat("  diabetes_med_binary: ", sum(data_logistic$diabetes_med_binary), " 'yes' values\n\n")
+
+# Multi-category variables - use model.matrix for dummy encoding
+# Age
+age_dummies <- model.matrix(~ age - 1, data = data_logistic)
+colnames(age_dummies) <- paste0("age_", gsub("\\[|\\]|\\)|\\(", "", colnames(age_dummies)))
+colnames(age_dummies) <- gsub(" ", "_", colnames(age_dummies))
+cat("Age dummy variables created: ", ncol(age_dummies), " columns\n")
+
+# Medical specialty
+medspec_dummies <- model.matrix(~ medical_specialty - 1, data = data_logistic)
+colnames(medspec_dummies) <- paste0("medspec_", gsub(" ", "_", colnames(medspec_dummies)))
+cat("Medical specialty dummy variables created: ", ncol(medspec_dummies), " columns\n")
+
+# Primary diagnosis
+diag1_dummies <- model.matrix(~ diag_1 - 1, data = data_logistic)
+colnames(diag1_dummies) <- paste0("diag1_", tolower(colnames(diag1_dummies)))
+cat("Primary diagnosis dummy variables created: ", ncol(diag1_dummies), " columns\n")
+
+# Glucose test
+glucose_dummies <- model.matrix(~ glucose_test - 1, data = data_logistic)
+colnames(glucose_dummies) <- paste0("glucose_", tolower(colnames(glucose_dummies)))
+cat("Glucose test dummy variables created: ", ncol(glucose_dummies), " columns\n")
+
+# A1C test
+a1c_dummies <- model.matrix(~ A1Ctest - 1, data = data_logistic)
+colnames(a1c_dummies) <- paste0("a1c_", tolower(colnames(a1c_dummies)))
+cat("A1C test dummy variables created: ", ncol(a1c_dummies), " columns\n\n")
+```
+- we are using one hot encoding, so a new column is made for each value, the matching column is set to 1 while the rest are set to 0.
+- we do this because Logistic regression expects a binary value
+- during model fitting, R will drop one column as the reference category
+## Combine Features for Logistic Regression
+
+```{r combine-logistic, echo=FALSE, comment=""}
+# Combine all features for Logistic Regression
+data_logistic <- data.frame(
+  readmitted = data_clean$readmitted_binary,
+  # Numerical variables
+  time_in_hospital = data_clean$time_in_hospital,
+  n_lab_procedures = data_clean$n_lab_procedures,
+  n_procedures = data_clean$n_procedures,
+  n_medications = data_clean$n_medications,
+  n_outpatient = data_clean$n_outpatient,
+  n_inpatient = data_clean$n_inpatient,
+  n_emergency = data_clean$n_emergency,
+  # Derived numerical features
+  n_diagnoses = data_clean$n_diagnoses,
+  medications_per_day = data_clean$medications_per_day,
+  total_previous_visits = data_clean$total_previous_visits,
+  # Binary variables
+  change_binary = data_logistic$change_binary,
+  diabetes_med_binary = data_logistic$diabetes_med_binary,
+  # Dummy-encoded categorical variables
+  age_dummies,
+  medspec_dummies,
+  diag1_dummies,
+  glucose_dummies,
+  a1c_dummies,
+  stringsAsFactors = FALSE
+)
+
+cat("Logistic Regression dataset created:\n")
+cat("  Observations: ", nrow(data_logistic), "\n")
+cat("  Variables: ", ncol(data_logistic), "\n")
+cat("  Response variable: readmitted (binary 0/1)\n\n")
+
+cat("Reference categories for dummy variables:\n")
+cat("  Age: Will use first alphabetically as reference\n")
+cat("  Medical specialty: 'Missing' is most frequent (49.53%)\n")
+cat("  Primary diagnosis: Most frequent category as reference\n")
+cat("  Glucose test: 'no' as reference\n")
+cat("  A1C test: 'no' as reference\n")
+cat("  Note: model.matrix() creates all levels; will drop reference in model fitting\n\n")
+```
+
+## Encoding for CART (Factor Encoding)
+
+```{r encoding-cart, echo=FALSE, comment=""}
+
+# Create readmitted factor first
+readmitted_factor <- factor(data_clean$readmitted_binary, 
+                           levels = c(0, 1),
+                           labels = c("Not_Readmitted", "Readmitted"))
+
+cat("Response variable converted to factor:\n")
+print(table(readmitted_factor))
+cat("\n")
+
+# Create CART dataset
+data_cart <- data.frame(
+  readmitted = readmitted_factor,
+  # Numerical variables
+  time_in_hospital = data_clean$time_in_hospital,
+  n_lab_procedures = data_clean$n_lab_procedures,
+  n_procedures = data_clean$n_procedures,
+  n_medications = data_clean$n_medications,
+  n_outpatient = data_clean$n_outpatient,
+  n_inpatient = data_clean$n_inpatient,
+  n_emergency = data_clean$n_emergency,
+  # Derived numerical features
+  n_diagnoses = data_clean$n_diagnoses,
+  medications_per_day = data_clean$medications_per_day,
+  total_previous_visits = data_clean$total_previous_visits,
+  # Factor categorical variables
+  age = factor(data_clean$age, 
+               levels = c("[40-50)", "[50-60)", "[60-70)", "[70-80)", "[80-90)", "[90-100)"),
+               ordered = TRUE),
+  medical_specialty = as.factor(data_clean$medical_specialty),
+  diag_1 = as.factor(data_clean$diag_1),
+  change = as.factor(data_clean$change),
+  diabetes_med = as.factor(data_clean$diabetes_med),
+  glucose_test = as.factor(data_clean$glucose_test),
+  A1Ctest = as.factor(data_clean$A1Ctest),
+  stringsAsFactors = FALSE
+)
+
+cat("CART dataset created:\n")
+cat("  Observations: ", nrow(data_cart), "\n")
+cat("  Variables: ", ncol(data_cart), "\n")
+cat("  Response variable: readmitted (factor: Not_Readmitted/Readmitted)\n\n")
+
+cat("Categorical variables converted to factors:\n")
+cat("  - age: ordered factor with ", length(levels(data_cart$age)), " levels\n")
+cat("  - medical_specialty: factor with ", length(levels(data_cart$medical_specialty)), " levels\n")
+cat("  - diag_1: factor with ", length(levels(data_cart$diag_1)), " levels\n")
+cat("  - change: factor with ", length(levels(data_cart$change)), " levels\n")
+cat("  - diabetes_med: factor with ", length(levels(data_cart$diabetes_med)), " levels\n")
+cat("  - glucose_test: factor with ", length(levels(data_cart$glucose_test)), " levels\n")
+cat("  - A1Ctest: factor with ", length(levels(data_cart$A1Ctest)), " levels\n")
+```
+
+```{r save-data, echo=FALSE, comment=""}
+# Save cleaned datasets
+save(data_clean, file = "data_clean.RData")
+
+save(data_logistic, file = "data_logistic.RData")
+
+save(data_cart, file = "data_cart.RData")
+```
+
+# Summary
+
+This phase successfully cleaned and preprocessed the data:
+
+- **Response variable**: Converted to binary format (0/1)
+- **Missing values**: Dropped 4 rows with missing primary diagnosis
+- **Feature engineering**: Created 3 derived features
+- **Encoding**: Prepared datasets for both model types
+- **Final dataset**: 24,996 observations (99.98% retention)
+

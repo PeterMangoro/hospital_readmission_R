@@ -1,0 +1,233 @@
+---
+title: "Phase 3: Exploratory Data Analysis"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "2025-11-30"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
+                      fig.width = 12, fig.height = 10)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 3: Exploratory Data Analysis (EDA). We examine relationships between predictors and readmission status, create comprehensive visualizations, and perform statistical tests.
+
+# Load Cleaned Data
+
+```{r load-data, echo=FALSE, comment=""}
+
+load("data_clean.RData")
+cat("Dataset: ", nrow(data_clean), " observations, ", ncol(data_clean), " variables\n\n")
+```
+
+# Univariate Analysis(summary statistics for numerical columns)
+
+```{r univariate, echo=FALSE, comment=""}
+selected_categorical <- c("age", "medical_specialty", "diag_1", "change", "diabetes_med", 
+                          "glucose_test", "A1Ctest")
+selected_numerical <- c("time_in_hospital", "n_lab_procedures", "n_procedures", "n_medications",
+                        # Previous visits (individual)
+                        "n_outpatient", "n_inpatient", "n_emergency",
+                        # Feature-engineered variables
+                        "n_diagnoses", "medications_per_day", "total_previous_visits")
+
+# Summary statistics for numerical variables
+numerical_summary <- data_clean %>%
+  select(all_of(selected_numerical)) %>%
+  summary()
+
+print(numerical_summary)
+```
+
+# Bivariate Analysis
+
+## Summary Statistics by Readmission Status
+
+```{r bivariate-stats, echo=FALSE, comment=""}
+# Split into multiple smaller tables for better PDF display
+
+# Table 1: Original Proposal Variables
+comparison_table1 <- data_clean %>%
+  group_by(readmitted = ifelse(readmitted_binary == 1, "Readmitted", "Not Readmitted")) %>%
+  summarise(
+    time_in_hospital = paste0(round(mean(time_in_hospital), 2), " (", round(sd(time_in_hospital), 2), ")"),
+    n_lab_procedures = paste0(round(mean(n_lab_procedures), 2), " (", round(sd(n_lab_procedures), 2), ")"),
+    n_procedures = paste0(round(mean(n_procedures), 2), " (", round(sd(n_procedures), 2), ")"),
+    n_medications = paste0(round(mean(n_medications), 2), " (", round(sd(n_medications), 2), ")")
+  )
+
+# Table 2: Previous Visits
+comparison_table2 <- data_clean %>%
+  group_by(readmitted = ifelse(readmitted_binary == 1, "Readmitted", "Not Readmitted")) %>%
+  summarise(
+    n_outpatient = paste0(round(mean(n_outpatient), 2), " (", round(sd(n_outpatient), 2), ")"),
+    n_inpatient = paste0(round(mean(n_inpatient), 2), " (", round(sd(n_inpatient), 2), ")"),
+    n_emergency = paste0(round(mean(n_emergency), 2), " (", round(sd(n_emergency), 2), ")")
+  )
+
+# Table 3: Feature-Engineered Variables
+comparison_table3 <- data_clean %>%
+  group_by(readmitted = ifelse(readmitted_binary == 1, "Readmitted", "Not Readmitted")) %>%
+  summarise(
+    n_diagnoses = paste0(round(mean(n_diagnoses), 2), " (", round(sd(n_diagnoses), 2), ")"),
+    medications_per_day = paste0(round(mean(medications_per_day, na.rm = TRUE), 2), " (", round(sd(medications_per_day, na.rm = TRUE), 2), ")"),
+    total_previous_visits = paste0(round(mean(total_previous_visits), 2), " (", round(sd(total_previous_visits), 2), ")")
+  )
+
+kable(comparison_table1, caption = "Summary Statistics: Original Proposal Variables", align = "l")
+
+kable(comparison_table2, caption = "Summary Statistics: Previous Visits", align = "l")
+
+kable(comparison_table3, caption = "Summary Statistics: Feature-Engineered Variables", align = "l")
+```
+
+## Boxplots: Numerical Variables by Readmission Status
+
+```{r boxplots, fig.cap="Distribution of Numerical Variables by Readmission Status", echo=FALSE, comment="", fig.width=14, fig.height=12}
+data_long_numerical <- data_clean %>%
+  select(all_of(selected_numerical), readmitted_binary) %>%
+  pivot_longer(cols = all_of(selected_numerical),
+               names_to = "variable",
+               values_to = "value")
+
+p_combined <- ggplot(data_long_numerical, 
+                    aes(x = factor(readmitted_binary, 
+                                  labels = c("Not Readmitted", "Readmitted")),
+                       y = value,
+                       fill = factor(readmitted_binary))) +
+  geom_boxplot(alpha = 0.7, width = 0.6, outlier.size = 1.5) +
+  facet_wrap(~ variable, scales = "free_y", ncol = 3) +
+  scale_fill_manual(values = c("lightcoral", "lightblue"),
+                   guide = "none") +
+  labs(title = "Distribution of Numerical Variables by Readmission Status",
+       x = "Readmission Status",
+       y = "Value") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        strip.text = element_text(size = 12, face = "bold"),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+        panel.spacing = unit(1, "lines"),
+        plot.margin = margin(1, 1, 1, 1, "cm"))
+print(p_combined)
+```
+
+## Categorical Variables by Readmission Status
+
+```{r categorical-analysis, echo=FALSE, comment=""}
+
+# Example: age by readmission
+age_crosstab <- table(data_clean$age, data_clean$readmitted_binary)
+colnames(age_crosstab) <- c("Not Readmitted", "Readmitted")
+kable(age_crosstab, caption = "Age by Readmission Status")
+```
+
+## Readmission Rates by Category
+
+```{r readmission-rates, fig.cap="Readmission Rate by Primary Diagnosis", echo=FALSE, comment=""}
+rates <- data_clean %>%
+  group_by(diag_1) %>%
+  summarise(
+    total = n(),
+    readmitted = sum(readmitted_binary),
+    readmission_rate = round(mean(readmitted_binary) * 100, 2)
+  ) %>%
+  arrange(desc(readmission_rate))
+
+p_rates <- ggplot(rates, aes(x = reorder(diag_1, readmission_rate), 
+                        y = readmission_rate)) +
+  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+  geom_text(aes(label = paste0(readmission_rate, "%")), 
+            hjust = -0.1, size = 3) +
+  coord_flip() +
+  labs(title = "Readmission Rate by Primary Diagnosis",
+       x = "Primary Diagnosis",
+       y = "Readmission Rate (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+print(p_rates)
+```
+
+# Statistical Tests
+
+## T-tests for Numerical Variables
+
+```{r t-tests, echo=FALSE,comment=""}
+for(var in selected_numerical) {
+  readmitted_group <- data_clean[data_clean$readmitted_binary == 1, var]
+  not_readmitted_group <- data_clean[data_clean$readmitted_binary == 0, var]
+  
+  test_result <- t.test(readmitted_group, not_readmitted_group)
+  
+  cat(sprintf("\n%s:\n", var))
+  cat(sprintf("  Mean (Readmitted): %.2f\n", mean(readmitted_group)))
+  cat(sprintf("  Mean (Not Readmitted): %.2f\n", mean(not_readmitted_group)))
+  cat(sprintf("  P-value: %.4f\n", test_result$p.value))
+  
+  if(test_result$p.value < 0.05) {
+    cat(" Significant difference (p < 0.05)\n")
+  } else {
+    cat(" No significant difference (p >= 0.05)\n")
+  }
+}
+```
+
+## Chi-square Tests for Categorical Variables
+
+```{r chi-square, echo=FALSE, comment=""}
+cat("\n\nChi-square tests for categorical variables:\n")
+for(var in selected_categorical) {
+  crosstab <- table(data_clean[[var]], data_clean$readmitted_binary)
+  test_result <- chisq.test(crosstab)
+  
+  cat(sprintf("\n%s:\n", var))
+  cat(sprintf("  Chi-square statistic: %.3f\n", test_result$statistic))
+  cat(sprintf("  P-value: %.4f\n", test_result$p.value))
+  
+  if(test_result$p.value < 0.05) {
+    cat(" Significant association (p < 0.05)\n")
+  } else {
+    cat(" No significant association (p >= 0.05)\n")
+  }
+}
+```
+
+# Key Findings
+
+## Summary of Key Findings
+
+```{r key-findings, echo=FALSE, comment=""}
+cat("1. Overall Readmission Rate: ", 
+    round(mean(data_clean$readmitted_binary) * 100, 2), "%\n\n")
+
+cat("2. Numerical Variables - Mean Differences:\n")
+for(var in selected_numerical) {
+  readmitted_mean <- mean(data_clean[data_clean$readmitted_binary == 1, var])
+  not_readmitted_mean <- mean(data_clean[data_clean$readmitted_binary == 0, var])
+  diff <- readmitted_mean - not_readmitted_mean
+  cat(sprintf("   %s: Readmitted (%.2f) vs. Not Readmitted (%.2f), Difference: %.2f\n",
+              var, readmitted_mean, not_readmitted_mean, diff))
+}
+```
+
+# Summary
+
+This phase revealed important patterns:
+
+- **All numerical variables** show significant differences between readmitted and not readmitted groups
+- **All categorical variables** show significant associations with readmission
+- **Previous visits** appear to be a key predictor
+- **Age and diagnosis** are important factors
+
+

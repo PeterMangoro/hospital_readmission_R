@@ -1,0 +1,203 @@
+---
+title: "Phase 6: Model Comparison - Logistic Regression vs. CART"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
+                      fig.width = 10, fig.height = 6, fig.align = "center")
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(pROC)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 6: Model Comparison. We compare the performance of Logistic Regression and CART models, analyze their interpretability, and justify model selection.
+
+# Load Results
+
+```{r load-results}
+cat("=== Phase 6: Model Comparison ===\n\n")
+
+# Load performance metrics
+metrics_logistic <- read.csv("plots/04_performance_metrics.csv")
+metrics_cart <- read.csv("plots/05_performance_metrics.csv")
+auc_logistic <- read.csv("plots/04_auc.csv")
+auc_cart <- read.csv("plots/05_auc.csv")
+regression_output <- read.csv("plots/04_regression_output.csv")
+var_importance <- read.csv("plots/05_variable_importance.csv")
+
+cat("Loaded results from both models\n")
+```
+
+# Performance Metrics Comparison
+
+```{r performance-comparison}
+cat("=== 6.1 Performance Metrics Comparison ===\n\n")
+
+# Create comparison table
+comparison_table <- data.frame(
+  Metric = metrics_logistic$Metric,
+  Logistic_Regression = round(metrics_logistic$Percentage, 2),
+  CART = round(metrics_cart$Percentage, 2),
+  Difference = round(metrics_logistic$Percentage - metrics_cart$Percentage, 2)
+)
+
+# Add AUC row
+comparison_table <- rbind(comparison_table,
+  data.frame(
+    Metric = "AUC",
+    Logistic_Regression = round(auc_logistic$Value * 100, 2),
+    CART = round(auc_cart$Value * 100, 2),
+    Difference = round((auc_logistic$Value - auc_cart$Value) * 100, 2)
+  )
+)
+
+kable(comparison_table, caption = "Side-by-Side Performance Comparison")
+```
+
+# Visualization
+
+## Performance Metrics Comparison
+
+```{r metrics-viz, fig.cap="Model Performance Comparison"}
+comparison_data <- data.frame(
+  Model = c("Logistic Regression", "CART"),
+  AUC = c(auc_logistic$Value, auc_cart$Value),
+  Accuracy = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Accuracy"] / 100,
+               metrics_cart$Percentage[metrics_cart$Metric == "Accuracy"] / 100),
+  Precision = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Precision"] / 100,
+                metrics_cart$Percentage[metrics_cart$Metric == "Precision"] / 100),
+  Recall = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Recall (Sensitivity)"] / 100,
+             metrics_cart$Percentage[metrics_cart$Metric == "Recall (Sensitivity)"] / 100),
+  F1_Score = c(metrics_logistic$Value[metrics_logistic$Metric == "F1-Score"],
+               metrics_cart$Value[metrics_cart$Metric == "F1-Score"])
+)
+
+comparison_long <- comparison_data %>%
+  select(Model, Accuracy, Precision, Recall, F1_Score) %>%
+  pivot_longer(cols = c(Accuracy, Precision, Recall, F1_Score),
+               names_to = "Metric",
+               values_to = "Value")
+
+p_metrics <- ggplot(comparison_long, aes(x = Metric, y = Value, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.8) +
+  scale_fill_manual(values = c("Logistic Regression" = "steelblue", "CART" = "lightcoral")) +
+  labs(title = "Model Performance Comparison",
+       subtitle = "Accuracy, Precision, Recall, and F1-Score",
+       y = "Score",
+       x = "Metric",
+       fill = "Model") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_metrics)
+```
+
+## AUC Comparison
+
+```{r auc-comparison, fig.cap="AUC Comparison: Logistic Regression vs. CART"}
+p_auc <- ggplot(comparison_data, aes(x = Model, y = AUC, fill = Model)) +
+  geom_bar(stat = "identity", alpha = 0.7) +
+  scale_fill_manual(values = c("Logistic Regression" = "steelblue", "CART" = "lightcoral")) +
+  labs(title = "AUC Comparison: Logistic Regression vs. CART",
+       y = "Area Under the Curve (AUC)",
+       x = "Model") +
+  geom_text(aes(label = round(AUC, 4)), vjust = -0.5, size = 5) +
+  ylim(0, max(comparison_data$AUC) * 1.2) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        legend.position = "none")
+print(p_auc)
+```
+
+# Interpretability Comparison
+
+```{r interpretability}
+cat("=== 6.3 Interpretability Comparison ===\n\n")
+
+cat("**Logistic Regression:**\n")
+cat("- Provides coefficients and odds ratios for each variable\n")
+cat("- Statistical significance testing (p-values)\n")
+cat("- ", nrow(regression_output), " parameters in the model\n")
+cat("- ", sum(regression_output$P_Value < 0.05, na.rm = TRUE), " significant variables (p < 0.05)\n\n")
+
+cat("**CART:**\n")
+cat("- Simple decision tree with ", nrow(var_importance), " variables considered\n")
+cat("- Only 1 split in the final tree\n")
+cat("- Very interpretable: single decision rule\n")
+cat("- Top variable: ", var_importance$Variable[1], " (", 
+    round(var_importance$Importance_Percent[1], 2), "% importance)\n")
+```
+
+# Model Selection
+
+```{r model-selection}
+cat("=== 6.4 Model Selection and Justification ===\n\n")
+
+# Determine winner
+lr_wins <- sum(comparison_table$Logistic_Regression > comparison_table$CART, na.rm = TRUE)
+cart_wins <- sum(comparison_table$CART > comparison_table$Logistic_Regression, na.rm = TRUE)
+
+cat("Performance Metrics Won:\n")
+cat("  Logistic Regression: ", lr_wins, " metrics\n")
+cat("  CART: ", cart_wins, " metrics\n\n")
+
+if(auc_logistic$Value > auc_cart$Value) {
+  best_model <- "Logistic Regression"
+  reason <- "Higher AUC and accuracy"
+} else {
+  best_model <- "CART"
+  reason <- "Higher AUC and accuracy"
+}
+
+cat("**Recommended Model: ", best_model, "**\n")
+cat("**Reason**: ", reason, "\n\n")
+
+# Justification table
+justification <- read.csv("plots/06_model_justification.csv")
+kable(justification, caption = "Model Comparison: Detailed Justification")
+```
+
+# Key Findings
+
+```{r key-findings}
+cat("=== 6.5 Key Findings Summary ===\n\n")
+
+cat("1. **Performance:**\n")
+cat("   - Both models show similar performance (accuracy ~61%)\n")
+cat("   - Logistic Regression has slightly higher AUC (0.648 vs 0.605)\n")
+cat("   - Both models have fair to poor discrimination (AUC < 0.7)\n\n")
+
+cat("2. **Interpretability:**\n")
+cat("   - CART is simpler (1 split vs 33 parameters)\n")
+cat("   - Logistic Regression provides more detailed statistical insights\n")
+cat("   - Both identify previous visits as key predictor\n\n")
+
+cat("3. **Key Predictors:**\n")
+cat("   - Logistic Regression: n_inpatient (OR: 1.47), age groups, medical specialty\n")
+cat("   - CART: total_previous_visits (42% importance)\n")
+```
+
+# Summary
+
+This phase compared both models:
+
+- **Logistic Regression** wins 4 out of 6 performance metrics
+- **CART** offers superior simplicity and interpretability
+- **Recommended**: Logistic Regression for better performance and statistical rigor
+- Both models identify **previous visits** as the strongest predictor
+
+Proceed to Phase 7 for final results and reporting.
+

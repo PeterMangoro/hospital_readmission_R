@@ -1,0 +1,104 @@
+================================================================================
+FINAL PROJECT SUMMARY: Predicting 30-Day Hospital Readmissions
+================================================================================
+
+RESEARCH QUESTION:
+Can patient demographic, diagnostic, and treatment-related features effectively
+predict the likelihood of a patient being readmitted to the hospital within
+30 days of discharge?
+
+ANSWER: YES, with moderate accuracy (~61%)
+
+================================================================================
+DATASET SUMMARY
+================================================================================
+Source: Kaggle - Diabetes 130-US Hospitals for 10 years
+Time Period: 1999-2008
+Hospitals: 130 US hospitals
+Original Observations: 25,000
+Final Observations: 24,996 (after cleaning)
+Readmission Rate: 47.02%
+
+================================================================================
+MODEL PERFORMANCE SUMMARY
+================================================================================
+LOGISTIC REGRESSION:
+  Accuracy: 61.84%
+  AUC: 0.6481
+  Precision: 64.09%
+  Recall: 42.05%
+  F1-Score: 0.5078
+  Pseudo R²: 0.0505
+  Significant Variables: 17
+
+CART:
+  Accuracy: 60.78%
+  AUC: 0.605
+  Precision: 58.71%
+  Recall: 55.83%
+  F1-Score: 0.5723
+  Tree Complexity: 1 split, 2 nodes
+  Top Variable: total_previous_visits (42.32% importance)
+
+WINNER: Logistic Regression (Higher AUC and Accuracy)
+
+================================================================================
+KEY FINDINGS
+================================================================================
+1. Previous hospital visits are the strongest predictor of readmission
+2. Age groups 70-80 and 80-90 show higher readmission risk
+3. Medical specialty (especially Cardiology) is associated with readmission
+4. Both models show moderate performance (AUC < 0.7)
+5. Logistic Regression provides more detailed statistical insights
+6. CART offers superior simplicity and interpretability
+
+================================================================================
+TOP PREDICTORS
+================================================================================
+Logistic Regression (by Odds Ratio):
+  1. n_inpatient (OR: 1.47, p: 0.0000)
+  2. n_diagnoses (OR: 1.33, p: 0.0725)
+  3. medspec_medical_specialtyCardiology (OR: 1.31, p: 0.0067)
+  4. medspec_medical_specialtyMissing (OR: 1.31, p: 0.0005)
+  5. medspec_medical_specialtyEmergency.Trauma (OR: 1.29, p: 0.0066)
+
+CART (by Importance):
+  1. total_previous_visits (42.32%)
+  2. n_inpatient (31.86%)
+  3. n_outpatient (15.42%)
+  4. n_emergency (10.33%)
+  5. time_in_hospital (0.05%)
+
+================================================================================
+LIMITATIONS
+================================================================================
+1. Moderate predictive performance (AUC < 0.7)
+2. Missing important clinical variables (lab results, vital signs)
+3. Data from 1999-2008 may not reflect current practices
+4. High missing data in medical_specialty (49.53%)
+5. CART model may be underfitting (very simple tree)
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+1. Include additional clinical variables for better predictions
+2. Consider ensemble methods (Random Forest, Gradient Boosting)
+3. Collect more recent data if possible
+4. Use Logistic Regression for detailed risk assessment
+5. Use CART for simple screening tools
+6. Validate models on external datasets before clinical use
+
+================================================================================
+PROJECT COMPLETION STATUS
+================================================================================
+✓ Phase 1: Data Loading - COMPLETE
+✓ Phase 2: Data Cleaning - COMPLETE
+✓ Phase 3: Exploratory Data Analysis - COMPLETE
+✓ Phase 4: Logistic Regression - COMPLETE
+✓ Phase 5: CART - COMPLETE
+✓ Phase 6: Model Comparison - COMPLETE
+✓ Phase 7: Results and Reporting - COMPLETE
+
+All outputs saved in 'plots/' directory
+Ready for R Markdown report generation
+

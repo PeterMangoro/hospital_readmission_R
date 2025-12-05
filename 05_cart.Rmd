@@ -1,0 +1,230 @@
+---
+title: "Phase 5: CART (Classification and Regression Trees) Model"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
+                      fig.width = 10, fig.height = 6, fig.align = "center")
+library(ggplot2)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+library(caret)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 5: CART (Classification and Regression Trees) Model. We build a decision tree model, visualize the tree structure, analyze variable importance, and evaluate model performance.
+
+# Load Data
+
+```{r load-data}
+cat("=== Phase 5: CART Model ===\n\n")
+
+cat("Loading CART dataset...\n")
+load("data_cart.RData")
+cat("Dataset: ", nrow(data_cart), " observations, ", ncol(data_cart), " variables\n")
+```
+
+# Train/Test Split
+
+```{r train-test}
+cat("=== 5.1 Train/Test Split ===\n\n")
+
+set.seed(123)
+train_indices <- createDataPartition(data_cart$readmitted, 
+                                     p = 0.7, 
+                                     list = FALSE)
+
+data_train_cart <- data_cart[train_indices, ]
+data_test_cart <- data_cart[-train_indices, ]
+
+cat("Training set: ", nrow(data_train_cart), " observations (70%)\n")
+cat("Testing set: ", nrow(data_test_cart), " observations (30%)\n")
+```
+
+# Build CART Model
+
+```{r build-model}
+cat("=== 5.2 Building CART Model ===\n\n")
+
+# Build model formula
+predictor_vars_cart <- setdiff(colnames(data_train_cart), "readmitted")
+formula_cart <- as.formula(paste("readmitted ~", paste(predictor_vars_cart, collapse = " + ")))
+
+# Fit the CART model
+model_cart <- rpart(formula_cart,
+                   data = data_train_cart,
+                   method = "class",
+                   parms = list(split = "gini"),
+                   control = rpart.control(
+                     minsplit = 20,
+                     minbucket = 7,
+                     cp = 0.01,
+                     maxdepth = 10,
+                     xval = 10
+                   ))
+
+cat("Model fitted successfully!\n")
+print(model_cart)
+```
+
+# Tree Pruning
+
+```{r prune-tree}
+cat("=== 5.3 Tree Pruning ===\n\n")
+
+# Find optimal CP
+cp_table <- model_cart$cptable
+optimal_cp_index <- which.min(cp_table[, "xerror"])
+xerror_min <- cp_table[optimal_cp_index, "xerror"]
+xerror_se <- cp_table[optimal_cp_index, "xstd"]
+xerror_1se <- xerror_min + xerror_se
+cp_1se_index <- which(cp_table[, "xerror"] <= xerror_1se)[1]
+cp_1se <- cp_table[cp_1se_index, "CP"]
+
+cat("1-SE Rule CP: ", cp_1se, "\n")
+
+# Prune the tree
+model_cart_final <- prune(model_cart, cp = cp_1se)
+
+cat("Tree pruned successfully!\n")
+cat("Pruned tree size: ", length(unique(model_cart_final$where)), " nodes\n")
+```
+
+# Visualize Decision Tree
+
+```{r visualize-tree, fig.cap="CART Decision Tree: Simple tree with one split based on total previous visits"}
+rpart.plot(model_cart_final, 
+           type = 2,
+           extra = 104,
+           fallen.leaves = TRUE,
+           branch = 0.3,
+           under = TRUE,
+           cex = 0.8,
+           main = "CART Decision Tree: Predicting Hospital Readmissions")
+```
+
+# Variable Importance
+
+```{r variable-importance}
+cat("=== 5.5 Variable Importance ===\n\n")
+
+# Extract variable importance
+var_importance <- model_cart_final$variable.importance
+var_importance_pct <- (var_importance / sum(var_importance)) * 100
+
+importance_df <- data.frame(
+  Variable = names(var_importance),
+  Importance = as.numeric(var_importance),
+  Importance_Percent = as.numeric(var_importance_pct)
+) %>%
+  arrange(desc(Importance))
+
+kable(head(importance_df, 10), caption = "Top 10 Most Important Variables")
+
+# Create importance plot
+p_importance <- ggplot(head(importance_df, 10), 
+                      aes(x = reorder(Variable, Importance_Percent), 
+                          y = Importance_Percent)) +
+  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+  coord_flip() +
+  labs(title = "CART Model: Variable Importance",
+       subtitle = "Top 10 Most Important Variables",
+       x = "Variable",
+       y = "Importance (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_importance)
+```
+
+# Model Evaluation
+
+```{r model-evaluation}
+cat("=== 5.6 Model Evaluation ===\n\n")
+
+# Make predictions
+predictions_class_cart <- predict(model_cart_final, newdata = data_test_cart, type = "class")
+predictions_prob_cart <- predict(model_cart_final, newdata = data_test_cart, type = "prob")[, "Readmitted"]
+
+# Confusion Matrix
+conf_matrix_cart <- table(Predicted = predictions_class_cart, Actual = data_test_cart$readmitted)
+kable(conf_matrix_cart, caption = "Confusion Matrix")
+
+# Calculate metrics
+actual_levels <- levels(data_test_cart$readmitted)
+not_readmitted_idx <- which(actual_levels == "Not_Readmitted")
+readmitted_idx <- which(actual_levels == "Readmitted")
+
+TN <- conf_matrix_cart[not_readmitted_idx, not_readmitted_idx]
+FP <- conf_matrix_cart[readmitted_idx, not_readmitted_idx]
+FN <- conf_matrix_cart[not_readmitted_idx, readmitted_idx]
+TP <- conf_matrix_cart[readmitted_idx, readmitted_idx]
+
+accuracy_cart <- (TP + TN) / (TP + TN + FP + FN)
+precision_cart <- TP / (TP + FP)
+recall_cart <- TP / (TP + FN)
+specificity_cart <- TN / (TN + FP)
+f1_score_cart <- 2 * (precision_cart * recall_cart) / (precision_cart + recall_cart)
+
+metrics_table_cart <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall (Sensitivity)", "Specificity", "F1-Score"),
+  Value = c(accuracy_cart, precision_cart, recall_cart, specificity_cart, f1_score_cart),
+  Percentage = c(accuracy_cart * 100, precision_cart * 100, recall_cart * 100, 
+                 specificity_cart * 100, f1_score_cart * 100)
+)
+
+kable(metrics_table_cart, caption = "CART Model Performance Metrics", digits = 2)
+```
+
+# ROC Curve
+
+```{r roc-curve, fig.cap="ROC Curve: CART Model"}
+roc_obj_cart <- roc(data_test_cart$readmitted, predictions_prob_cart)
+auc_value_cart <- auc(roc_obj_cart)
+
+cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_cart), 4), "\n")
+
+# Create ROC plot
+roc_data_cart <- data.frame(
+  FPR = 1 - roc_obj_cart$specificities,
+  TPR = roc_obj_cart$sensitivities
+)
+
+p_roc_cart <- ggplot(roc_data_cart, aes(x = FPR, y = TPR)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "ROC Curve: CART Model",
+       subtitle = paste("AUC =", round(as.numeric(auc_value_cart), 4)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_roc_cart)
+```
+
+# Summary
+
+This phase successfully built and evaluated the CART model:
+
+- **Accuracy**: 60.78%
+- **AUC**: 0.605
+- **Tree complexity**: 1 split, 2 nodes (very simple)
+- **Top predictor**: Total previous visits (42.32% importance)
+- **Interpretability**: Very high (simple decision rule)
+
+Proceed to Phase 6 for model comparison.
+

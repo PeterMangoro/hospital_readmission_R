@@ -1,0 +1,451 @@
+---
+title: 'Phase 4: Logistic Regression Model'
+author: "Masheia Dzimba and Peter Mangoro"
+date: "2025-12-02"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(dplyr)
+library(pROC)
+library(caret)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 4: Logistic Regression Model. We build a logistic regression model to predict 30-day hospital readmissions, interpret coefficients and odds ratios, and evaluate model performance.
+
+# Load Data
+
+```{r load-data, echo=FALSE, comment=""}
+load("data_logistic.RData")
+cat("Dataset: ", nrow(data_logistic), " observations, ", ncol(data_logistic), " variables\n")
+```
+# Train/Test Split
+
+```{r train-test, echo=FALSE, comment=""}
+set.seed(1)
+train_indices <- createDataPartition(data_logistic$readmitted, 
+                                     p = 0.7, 
+                                     list = FALSE)
+
+data_train <- data_logistic[train_indices, ]
+data_test <- data_logistic[-train_indices, ]
+
+cat("Training set: ", nrow(data_train), " observations (70%)\n")
+cat("Testing set: ", nrow(data_test), " observations (30%)\n")
+cat("Readmission rate - Training: ", round(mean(data_train$readmitted)*100, 2), "%\n")
+cat("Readmission rate - Testing: ", round(mean(data_test$readmitted)*100, 2), "%\n")
+```
+
+# Build Model
+
+```{r build-model,comment=""}
+# Build model formula
+predictor_vars <- setdiff(colnames(data_train), "readmitted")
+formula_str <- paste("readmitted ~", paste(predictor_vars, collapse = " + "))
+formula_obj <- as.formula(formula_str)
+
+# Fit the model
+model_logistic <- glm(formula_obj, 
+                     data = data_train, 
+                     family = binomial(link = "logit"))
+
+```
+
+# Logistic Regression Equation
+
+## Mathematical Formulation
+
+The logistic regression model uses the logistic function to model the probability of readmission:
+
+
+$$P(\text{Readmitted} = 1 \mid X) = \frac{e^{\beta_0 + \sum_{i=1}^{p} \beta_i X_i}}{1 + e^{\beta_0 + \sum_{i=1}^{p} \beta_i X_i}}$$
+
+
+Or equivalently, 
+
+$$\text{logit}(P) = \ln\left(\frac{P}{1-P}\right) = \beta_0 + \sum_{i=1}^{p} \beta_i X_i$$
+
+Where:
+
+- $P(\text{Readmitted} = 1 \mid X)$ = Probability of readmission given predictor variables
+
+- $\beta_0$ = Intercept (baseline log-odds)
+
+- $\beta_1, \beta_2, ..., \beta_p$ = Coefficients for each predictor variable
+
+- $X_1, X_2, ..., X_p$ = Predictor variables
+
+## Fitted Model Equation
+
+```{r fitted-equation, echo=FALSE, comment="", results='asis'}
+# Extract intercept and top coefficients
+intercept <- round(coef(model_logistic)[1], 4)
+all_coefs <- coef(model_logistic)[-1]  # All except intercept
+top_coefs <- head(sort(abs(all_coefs), decreasing = TRUE), 5)
+top_vars <- names(top_coefs)
+top_coef_values <- round(all_coefs[top_vars], 4)
+
+
+# Build equation with line breaks using split environment
+# Break after every 2 terms for better viewing
+cat("$$\\begin{split}\n")
+cat("\\text{logit}(P) &= ", intercept, sep = "")
+
+# Process terms in groups of 2
+terms_per_line <- 2
+line_num <- 1
+for(i in 1:length(top_vars)) {
+  var_name <- gsub("_", "\\\\_", top_vars[i])
+  
+  # Break line after every 2 terms (except for the first line)
+  if(i > 1 && (i - 1) %% terms_per_line == 0) {
+    cat(" \\\\\n&\\quad")
+  }
+  
+  if(top_coef_values[i] >= 0) {
+    cat(" + ", top_coef_values[i], " \\cdot X_{\\text{", var_name, "}}", sep = "")
+  } else {
+    cat(" ", top_coef_values[i], " \\cdot X_{\\text{", var_name, "}}", sep = "")
+  }
+}
+
+cat(" + \\text{... (other predictors)}\n")
+cat("\\end{split}$$\n\n")
+
+cat("**Where:**\n\n")
+cat("* $P$ = Probability of readmission\n")
+cat("* $\\beta_0 = ", intercept, "$ (intercept)\n", sep = "")
+
+for(i in 1:length(top_vars)) {
+  var_name <- gsub("_", "\\\\_", top_vars[i])
+  cat("* $\\beta_{\\text{", var_name, "}} = ", top_coef_values[i], "$\n", sep = "")
+}
+```
+
+
+
+## Example Calculation
+
+```{r example-calculation, echo=FALSE, results='asis'}
+# Create example patient values (using top 3 predictors)
+example_vars <- top_vars[1:min(3, length(top_vars))]
+example_coefs <- top_coef_values[1:min(3, length(top_coef_values))]
+
+# Get example values from actual dataset or use custom values
+example_values <- numeric(length(example_vars))
+names(example_values) <- example_vars
+
+for(i in 1:length(example_vars)) {
+  var <- example_vars[i]
+  
+  # Check if custom value is provided
+  if(exists("custom_values") && !is.null(custom_values) && var %in% names(custom_values)) {
+    example_values[i] <- custom_values[var]
+  } else if(var %in% colnames(data_train)) {
+    # For numerical variables, use median
+    if(is.numeric(data_train[[var]])) {
+      example_values[i] <- round(median(data_train[[var]], na.rm = TRUE), 2)
+    } else {
+      # For categorical/dummy variables (0/1), use 1 to show the effect
+      example_values[i] <- 1
+    }
+  } else {
+    # If variable not found, use a reasonable default
+    example_values[i] <- 3
+  }
+}
+
+
+# TO CUSTOMIZE VALUES: Comment or Uncomment and modify the lines below
+# example_values["n_diagnoses"] <- 3
+ example_values["n_inpatient"] <- 2
+# example_values["medspec_medical_specialtyEmergency.Trauma"] <- 1
+
+cat("For a patient with:\n\n")
+for(i in 1:length(example_vars)) {
+  var_name <- gsub("_", " ", example_vars[i])
+  cat("* ", var_name, " = ", example_values[i], "\n", sep = "")
+}
+
+# Calculate logit using actual values
+example_logit <- intercept + sum(example_coefs * example_values)
+example_prob <- round(exp(example_logit) / (1 + exp(example_logit)), 4)
+
+cat("\n**Logit calculation:**\n\n")
+
+# Build logit equation with line breaks using actual values
+cat("$$\\begin{split}\n")
+cat("\\text{logit}(P) &= ", intercept, sep = "")
+for(i in 1:length(example_vars)) {
+  coef <- example_coefs[i]
+  val <- example_values[i]
+  if(coef >= 0) {
+    cat(" + ", coef, " \\cdot ", val, sep = "")
+  } else {
+    cat(" ", coef, " \\cdot ", val, sep = "")
+  }
+}
+cat(" \\\\\n&= ", round(example_logit, 4), "\n", sep = "")
+cat("\\end{split}$$\n\n")
+
+cat("**Probability calculation:**\n\n")
+prob_string <- paste0("P = \\frac{e^{", round(example_logit, 4), "}}{1 + e^{", round(example_logit, 4), "}} = ", example_prob)
+cat("$$", prob_string, "$$\n\n", sep = "")
+
+cat("**Interpretation:** This patient has a ", round(example_prob * 100, 2), "% probability of readmission.\n", sep = "")
+```
+
+
+## Coefficient Interpretation
+
+**Coefficients ($\beta$):**
+
+- **Sign**: Positive coefficients increase the log-odds (and probability) of readmission; negative coefficients decrease it
+
+- **Magnitude**: Larger absolute values indicate stronger effects
+
+
+**Example**: If $\beta_{\text{n\_inpatient}} = 0.38$:
+
+- A one-unit increase in previous inpatient visits increases the log-odds of readmission by 0.38
+
+- This corresponds to an odds ratio of $e^{0.38} = 1.46$ (46% increase in odds)
+
+## Gradient (Rate of Change)
+
+The **gradient** represents how quickly the probability changes with respect to each predictor:
+
+$$\frac{\partial P}{\partial X_i} = \beta_i \cdot P(1-P)$$
+
+**Key Points:**
+
+- The gradient is **not constant** - it depends on the current probability $P$
+
+- Maximum gradient occurs when $P = 0.5$ (steepest part of the S-curve)
+
+- The gradient is smaller when $P$ is close to 0 or 1 (flatter parts of the curve)
+
+# Model Summary
+
+```{r model-summary, echo=FALSE, comment=""}
+model_summary <- summary(model_logistic)
+print(model_summary)
+```
+
+# Regression Output
+
+```{r regression-output, echo=FALSE, comment=""}
+# Extract coefficients
+coefficients_table <- model_summary$coefficients
+
+# Create comprehensive output table
+output_table <- data.frame(
+  Variable = rownames(coefficients_table),
+  Coefficient = round(coefficients_table[, "Estimate"], 4),
+  Std_Error = round(coefficients_table[, "Std. Error"], 4),
+  Z_Value = round(coefficients_table[, "z value"], 4),
+  P_Value = round(coefficients_table[, "Pr(>|z|)"], 6),
+  Odds_Ratio = round(exp(coefficients_table[, "Estimate"]), 4),
+  CI_Lower = round(exp(coefficients_table[, "Estimate"] - 1.96 * coefficients_table[, "Std. Error"]), 4),
+  CI_Upper = round(exp(coefficients_table[, "Estimate"] + 1.96 * coefficients_table[, "Std. Error"]), 4)
+)
+
+# Split into multiple tables for better PDF display
+significant_vars <- output_table[output_table$P_Value < 0.05, ]
+significant_vars_ordered <- significant_vars[order(significant_vars$P_Value), ]
+
+# Table 1: Top 5 Most Significant (with full details)
+top5_table <- head(significant_vars_ordered, 5)
+kable(top5_table[, c("Variable", "Coefficient", "Std_Error", "Z_Value", "P_Value")],
+      caption = "Top 5 Most Significant Variables: Coefficients and Statistics",
+      digits = 4, row.names = FALSE)
+
+# Table 2: Top 5 Odds Ratios
+top5_odds <- head(significant_vars_ordered, 5)
+kable(top5_odds[, c("Variable", "Odds_Ratio", "CI_Lower", "CI_Upper", "P_Value")],
+      caption = "Top 5 Most Significant Variables: Odds Ratios and Confidence Intervals",
+      digits = 4, row.names = FALSE)
+
+# Table 3: Next 10 Significant Variables (summary)
+if(nrow(significant_vars_ordered) > 5) {
+  next10_table <- significant_vars_ordered[6:min(15, nrow(significant_vars_ordered)), ]
+  kable(next10_table[, c("Variable", "Coefficient", "Odds_Ratio", "P_Value")],
+        caption = "Additional Significant Variables (p < 0.05)",
+        digits = 4, row.names = FALSE)
+}
+```
+
+# Hypothesis Testing
+
+```{r hypothesis-testing, echo=FALSE, comment="", results='asis'}
+cat("**Hypothesis Testing**\n\n")
+
+cat("For each variable in the model:\n\n")
+cat("$H_0$: $\\beta_{\\text{variable}} = 0$ (variable has no effect on readmission)\n\n")
+cat("$H_1$: $\\beta_{\\text{variable}} \\neq 0$ (variable affects readmission)\n\n")
+
+# Show top significant variables
+top_significant <- head(significant_vars[order(significant_vars$P_Value), ], 5)
+kable(top_significant[, c("Variable", "Coefficient", "P_Value", "Odds_Ratio")],
+      caption = "Top 5 Most Significant Variables", row.names = FALSE)
+```
+
+# R-squared Interpretation
+
+```{r rsquared,echo=FALSE,comment="", results='asis'}
+
+# Calculate pseudo R-squared
+null_deviance <- model_summary$null.deviance
+residual_deviance <- model_summary$deviance
+mcfadden_r2 <- 1 - (residual_deviance / null_deviance)
+
+cat("McFadden's Pseudo $R^2$: ", round(mcfadden_r2, 4), "\n\n")
+cat("Interpretation: The model explains approximately ", 
+    round(mcfadden_r2 * 100, 2), 
+    "% of the variance in readmission status.\n")
+```
+
+# Model Evaluation
+
+```{r model-evaluation,echo=FALSE,comment=""}
+
+# Make predictions
+predictions_prob <- predict(model_logistic, newdata = data_test, type = "response")
+predictions_class <- ifelse(predictions_prob > 0.5, 1, 0)
+
+# Confusion Matrix
+conf_matrix <- table(Predicted = predictions_class, Actual = data_test$readmitted)
+kable(conf_matrix, caption = "Confusion Matrix")
+
+# Calculate metrics
+TN <- conf_matrix[1, 1]
+FP <- conf_matrix[2, 1]
+FN <- conf_matrix[1, 2]
+TP <- conf_matrix[2, 2]
+
+accuracy <- (TP + TN) / (TP + TN + FP + FN)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+metrics_table <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall (Sensitivity)", "Specificity", "F1-Score"),
+  Value = c(accuracy, precision, recall, specificity, f1_score),
+  Percentage = c(accuracy * 100, precision * 100, recall * 100, specificity * 100, f1_score * 100)
+)
+
+kable(metrics_table, caption = "Model Performance Metrics", digits = 2)
+```
+
+# ROC Curve
+
+```{r roc-curve, fig.cap="ROC Curve: Logistic Regression Model", echo=FALSE,comment=""}
+roc_obj <- roc(data_test$readmitted, predictions_prob)
+auc_value <- auc(roc_obj)
+
+cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value), 4), "\n")
+
+# Create ROC plot
+roc_data <- data.frame(
+  FPR = 1 - roc_obj$specificities,
+  TPR = roc_obj$sensitivities
+)
+
+p_roc <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "ROC Curve: Logistic Regression Model",
+       subtitle = paste("AUC =", round(as.numeric(auc_value), 4)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_roc)
+```
+
+# Odds Ratios Interpretation
+
+```{r odds-ratios, echo=FALSE, comment=""}
+
+cat("Top Variables with Highest Odds Ratios (Risk Factors):\n\n")
+
+# Split into two tables
+top_odds <- output_table[order(-output_table$Odds_Ratio), ]
+top_odds_filtered <- top_odds[top_odds$P_Value < 0.05, ]  # Only significant ones
+
+# Table 1: Top 5 Risk Factors
+top5_risk <- head(top_odds_filtered, 5)
+kable(top5_risk[, c("Variable", "Odds_Ratio", "CI_Lower", "CI_Upper", "P_Value")],
+      caption = "Top 5 Risk Factors (Highest Odds Ratios)",
+      digits = 4, row.names = FALSE)
+
+# Table 2: Next 5 Risk Factors
+if(nrow(top_odds_filtered) > 5) {
+  next5_risk <- top_odds_filtered[6:min(10, nrow(top_odds_filtered)), ]
+  kable(next5_risk[, c("Variable", "Odds_Ratio", "CI_Lower", "CI_Upper", "P_Value")],
+        caption = "Additional Risk Factors",
+        digits = 4, row.names = FALSE)
+}
+```
+
+# Summary
+
+```{r summary, echo=FALSE, comment="", results='asis'}
+# Calculate summary statistics dynamically
+# Accuracy (from model evaluation)
+predictions_prob_summary <- predict(model_logistic, newdata = data_test, type = "response")
+predictions_class_summary <- ifelse(predictions_prob_summary > 0.5, 1, 0)
+conf_matrix_summary <- table(Predicted = predictions_class_summary, Actual = data_test$readmitted)
+TN_summary <- conf_matrix_summary[1, 1]
+FP_summary <- conf_matrix_summary[2, 1]
+FN_summary <- conf_matrix_summary[1, 2]
+TP_summary <- conf_matrix_summary[2, 2]
+accuracy_summary <- (TP_summary + TN_summary) / (TP_summary + TN_summary + FP_summary + FN_summary)
+
+# AUC (from ROC)
+roc_obj_summary <- roc(data_test$readmitted, predictions_prob_summary)
+auc_value_summary <- as.numeric(auc(roc_obj_summary))
+
+# Pseudo R² (from rsquared section)
+null_deviance_summary <- model_summary$null.deviance
+residual_deviance_summary <- model_summary$deviance
+mcfadden_r2_summary <- 1 - (residual_deviance_summary / null_deviance_summary)
+
+# Number of significant variables
+n_significant <- sum(output_table$P_Value < 0.05)
+
+# Top predictor (highest odds ratio among significant variables)
+top_odds_summary <- output_table[order(-output_table$Odds_Ratio), ]
+top_odds_filtered_summary <- top_odds_summary[top_odds_summary$P_Value < 0.05, ]
+if(nrow(top_odds_filtered_summary) > 0) {
+  top_predictor_name <- top_odds_filtered_summary$Variable[1]
+  top_predictor_or <- round(top_odds_filtered_summary$Odds_Ratio[1], 2)
+  # Clean up variable name for display
+  top_predictor_display <- gsub("_", " ", top_predictor_name)
+  top_predictor_display <- gsub("medspec medical specialty", "medical specialty", top_predictor_display)
+} else {
+  top_predictor_display <- "N/A"
+  top_predictor_or <- 0
+}
+
+cat("- **Accuracy**: ", round(accuracy_summary * 100, 2), "%\n", sep = "")
+cat("- **AUC**: ", round(auc_value_summary, 3), "\n", sep = "")
+cat("- **Pseudo $R^2$**: ", round(mcfadden_r2_summary * 100, 2), "%\n", sep = "")
+cat("- **", n_significant, " significant variables** identified (p < 0.05)\n", sep = "")
+cat("- **Top predictor**: ", top_predictor_display, " (OR: ", top_predictor_or, ")\n", sep = "")
+```
+
+

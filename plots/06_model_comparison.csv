@@ -1,0 +1,7 @@
+"Metric","Logistic_Regression","CART","Difference"
+"Accuracy",61.84,60.78,1.07
+"Precision",64.09,58.71,5.38
+"Recall (Sensitivity)",42.05,55.83,-13.78
+"Specificity",79.26,65.16,14.1
+"F1-Score",50.78,57.23,-6.45
+"AUC",64.81,60.5,4.31

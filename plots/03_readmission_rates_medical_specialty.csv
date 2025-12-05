@@ -1,0 +1,8 @@
+"medical_specialty","total","readmitted","readmission_rate"
+"Family/GeneralPractice",1882,932,49.52
+"Emergency/Trauma",1885,931,49.39
+"Missing",12380,6055,48.91
+"Cardiology",1409,634,45
+"InternalMedicine",3565,1596,44.77
+"Other",2662,1104,41.47
+"Surgery",1213,500,41.22
