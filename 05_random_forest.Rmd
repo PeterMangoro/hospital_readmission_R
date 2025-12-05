@@ -1,0 +1,217 @@
+---
+title: "Phase 5b: Random Forest Model"
+author: "Masheia Dzimba and Peter Mangoro"
+date: "2025-12-06"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Install randomForest if needed
+if (!require(randomForest)) {
+  install.packages("randomForest")
+  library(randomForest)
+}
+
+library(ggplot2)
+library(dplyr)
+library(pROC)
+library(caret)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 5b: Random Forest Model. We build an ensemble decision tree model using Random Forest, analyze variable importance, and evaluate model performance.
+
+# Load Data
+
+```{r load-data, echo=FALSE, comment=""}
+load("data_cart.RData")
+cat("Dataset: ", nrow(data_cart), " observations, ", ncol(data_cart), " variables\n")
+```
+
+# Train/Test Split
+
+```{r train-test, echo=FALSE, comment=""}
+set.seed(1)
+train_indices <- createDataPartition(data_cart$readmitted, 
+                                     p = 0.7, 
+                                     list = FALSE)
+
+data_train_rf <- data_cart[train_indices, ]
+data_test_rf <- data_cart[-train_indices, ]
+
+cat("Training set: ", nrow(data_train_rf), " observations (70%)\n")
+cat("Testing set: ", nrow(data_test_rf), " observations (30%)\n")
+```
+
+# Build Random Forest Model
+
+```{r build-model, echo=FALSE, comment=""}
+# Build model formula
+predictor_vars_rf <- setdiff(colnames(data_train_rf), "readmitted")
+formula_rf <- as.formula(paste("readmitted ~", paste(predictor_vars_rf, collapse = " + ")))
+
+# Calculate mtry (number of features to consider at each split)
+# Common default: sqrt(p) for classification
+mtry_value <- floor(sqrt(length(predictor_vars_rf)))
+
+# Fit the Random Forest model
+model_rf <- randomForest(
+  formula_rf,
+  data = data_train_rf,
+  ntree = 500,              # Number of trees
+  mtry = mtry_value,        # Number of features at each split
+  importance = TRUE,        # Calculate variable importance
+  proximity = FALSE,        # Don't calculate proximity matrix (saves memory)
+  do.trace = 50            # Print progress every 50 trees
+)
+
+cat("Random Forest model fitted successfully!\n")
+cat("Number of trees: ", model_rf$ntree, "\n")
+cat("Features per split (mtry): ", model_rf$mtry, "\n")
+```
+
+# Variable Importance
+
+```{r variable-importance, echo=FALSE, comment=""}
+# Extract variable importance
+var_importance_rf <- importance(model_rf)
+var_importance_rf_df <- data.frame(
+  Variable = rownames(var_importance_rf),
+  MeanDecreaseGini = as.numeric(var_importance_rf[, "MeanDecreaseGini"]),
+  MeanDecreaseAccuracy = as.numeric(var_importance_rf[, "MeanDecreaseAccuracy"])
+) %>%
+  arrange(desc(MeanDecreaseGini))
+
+# Convert to percentage
+var_importance_rf_df$Importance_Percent <- (var_importance_rf_df$MeanDecreaseGini / sum(var_importance_rf_df$MeanDecreaseGini)) * 100
+
+kable(head(var_importance_rf_df, 10), caption = "Random Forest: Most Important Variables", row.names = FALSE)
+
+# Save importance table
+write.csv(var_importance_rf_df, "plots/05b_variable_importance.csv", row.names = FALSE)
+
+# Create importance plot
+p_importance_rf <- ggplot(head(var_importance_rf_df, 10), 
+                         aes(x = reorder(Variable, Importance_Percent), 
+                             y = Importance_Percent)) +
+  geom_bar(stat = "identity", fill = "darkgreen", alpha = 0.7) +
+  coord_flip() +
+  labs(title = "Random Forest: Variable Importance",
+       subtitle = "Most Important Variables",
+       x = "Variable",
+       y = "Importance (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_importance_rf)
+```
+
+# Model Evaluation
+
+```{r model-evaluation, echo=FALSE, comment=""}
+# Make predictions
+predictions_class_rf <- predict(model_rf, newdata = data_test_rf, type = "class")
+predictions_prob_rf <- predict(model_rf, newdata = data_test_rf, type = "prob")[, "Readmitted"]
+
+# Confusion Matrix
+conf_matrix_rf <- table(Predicted = predictions_class_rf, Actual = data_test_rf$readmitted)
+kable(conf_matrix_rf, caption = "Random Forest: Confusion Matrix", row.names = TRUE)
+
+# Calculate metrics
+actual_levels_rf <- levels(data_test_rf$readmitted)
+not_readmitted_idx_rf <- which(actual_levels_rf == "Not_Readmitted")
+readmitted_idx_rf <- which(actual_levels_rf == "Readmitted")
+
+TN_rf <- conf_matrix_rf[not_readmitted_idx_rf, not_readmitted_idx_rf]
+FP_rf <- conf_matrix_rf[readmitted_idx_rf, not_readmitted_idx_rf]
+FN_rf <- conf_matrix_rf[not_readmitted_idx_rf, readmitted_idx_rf]
+TP_rf <- conf_matrix_rf[readmitted_idx_rf, readmitted_idx_rf]
+
+accuracy_rf <- (TP_rf + TN_rf) / (TP_rf + TN_rf + FP_rf + FN_rf)
+precision_rf <- TP_rf / (TP_rf + FP_rf)
+recall_rf <- TP_rf / (TP_rf + FN_rf)
+specificity_rf <- TN_rf / (TN_rf + FP_rf)
+f1_score_rf <- 2 * (precision_rf * recall_rf) / (precision_rf + recall_rf)
+
+metrics_table_rf <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall (Sensitivity)", "Specificity", "F1-Score"),
+  Value = c(accuracy_rf, precision_rf, recall_rf, specificity_rf, f1_score_rf),
+  Percentage = c(accuracy_rf * 100, precision_rf * 100, recall_rf * 100, 
+                 specificity_rf * 100, f1_score_rf * 100)
+)
+
+kable(metrics_table_rf, caption = "Random Forest: Performance Metrics", digits = 2, row.names = FALSE)
+
+# Save metrics
+write.csv(metrics_table_rf, "plots/05b_performance_metrics.csv", row.names = FALSE)
+```
+
+# ROC Curve
+
+```{r roc-curve, fig.cap="ROC Curve: Random Forest Model", echo=FALSE, comment=""}
+roc_obj_rf <- roc(data_test_rf$readmitted, predictions_prob_rf)
+auc_value_rf <- auc(roc_obj_rf)
+
+cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_rf), 4), "\n")
+
+# Save AUC value
+auc_table_rf <- data.frame(
+  Metric = "Area Under the Curve (AUC)",
+  Value = as.numeric(auc_value_rf)
+)
+write.csv(auc_table_rf, "plots/05b_auc.csv", row.names = FALSE)
+
+# Create ROC plot
+roc_data_rf <- data.frame(
+  FPR = 1 - roc_obj_rf$specificities,
+  TPR = roc_obj_rf$sensitivities
+)
+
+p_roc_rf <- ggplot(roc_data_rf, aes(x = FPR, y = TPR)) +
+  geom_line(color = "darkgreen", linewidth = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "ROC Curve: Random Forest Model",
+       subtitle = paste("AUC =", round(as.numeric(auc_value_rf), 4)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_roc_rf)
+```
+
+# Summary
+
+```{r summary, echo=FALSE, comment="", results='asis'}
+# Calculate summary statistics dynamically
+n_trees <- model_rf$ntree
+mtry_used <- model_rf$mtry
+
+# Top predictor
+if(nrow(var_importance_rf_df) > 0) {
+  top_predictor_rf <- var_importance_rf_df$Variable[1]
+  top_predictor_importance_rf <- round(var_importance_rf_df$Importance_Percent[1], 2)
+  top_predictor_display_rf <- gsub("_", " ", top_predictor_rf)
+} else {
+  top_predictor_display_rf <- "N/A"
+  top_predictor_importance_rf <- 0
+}
+
+cat("This phase successfully built and evaluated the Random Forest model:\n\n")
+cat("- **Accuracy**: ", round(accuracy_rf * 100, 2), "%\n", sep = "")
+cat("- **AUC**: ", round(as.numeric(auc_value_rf), 3), "\n", sep = "")
+cat("- **Number of trees**: ", n_trees, "\n", sep = "")
+cat("- **Features per split (mtry)**: ", mtry_used, "\n", sep = "")
+cat("- **Top predictor**: ", top_predictor_display_rf, " (", top_predictor_importance_rf, "% importance)\n", sep = "")
+cat("- **Interpretability**: Lower than CART (ensemble of ", n_trees, " trees)\n", sep = "")
+```
+
