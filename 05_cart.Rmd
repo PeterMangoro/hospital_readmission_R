@@ -1,19 +1,17 @@
 ---
 title: "Phase 5: CART (Classification and Regression Trees) Model"
 author: "Masheia Dzimba and Peter Mangoro"
-date: "`r Sys.Date()`"
+date: "2025-12-04"
 output: 
-  html_document:
+  pdf_document:
     toc: true
     toc_depth: 2
     number_sections: true
     fig_caption: true
-    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, 
-                      fig.width = 10, fig.height = 6, fig.align = "center")
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(ggplot2)
 library(dplyr)
 library(rpart)
@@ -29,20 +27,15 @@ This document presents Phase 5: CART (Classification and Regression Trees) Model
 
 # Load Data
 
-```{r load-data}
-cat("=== Phase 5: CART Model ===\n\n")
-
-cat("Loading CART dataset...\n")
+```{r load-data, echo=FALSE, comment=""}
 load("data_cart.RData")
 cat("Dataset: ", nrow(data_cart), " observations, ", ncol(data_cart), " variables\n")
 ```
 
 # Train/Test Split
 
-```{r train-test}
-cat("=== 5.1 Train/Test Split ===\n\n")
-
-set.seed(123)
+```{r train-test, echo=FALSE, comment=""}
+set.seed(1)
 train_indices <- createDataPartition(data_cart$readmitted, 
                                      p = 0.7, 
                                      list = FALSE)
@@ -56,9 +49,7 @@ cat("Testing set: ", nrow(data_test_cart), " observations (30%)\n")
 
 # Build CART Model
 
-```{r build-model}
-cat("=== 5.2 Building CART Model ===\n\n")
-
+```{r build-model, comment=""}
 # Build model formula
 predictor_vars_cart <- setdiff(colnames(data_train_cart), "readmitted")
 formula_cart <- as.formula(paste("readmitted ~", paste(predictor_vars_cart, collapse = " + ")))
@@ -76,14 +67,12 @@ model_cart <- rpart(formula_cart,
                      xval = 10
                    ))
 
-cat("Model fitted successfully!\n")
 print(model_cart)
 ```
 
 # Tree Pruning
 
-```{r prune-tree}
-cat("=== 5.3 Tree Pruning ===\n\n")
+```{r prune-tree, echo=FALSE, comment=""}
 
 # Find optimal CP
 cp_table <- model_cart$cptable
@@ -99,13 +88,12 @@ cat("1-SE Rule CP: ", cp_1se, "\n")
 # Prune the tree
 model_cart_final <- prune(model_cart, cp = cp_1se)
 
-cat("Tree pruned successfully!\n")
 cat("Pruned tree size: ", length(unique(model_cart_final$where)), " nodes\n")
 ```
 
 # Visualize Decision Tree
 
-```{r visualize-tree, fig.cap="CART Decision Tree: Simple tree with one split based on total previous visits"}
+```{r visualize-tree, fig.cap="CART Decision Tree: Simple tree with one split based on total previous visits", echo=FALSE, comment=""}
 rpart.plot(model_cart_final, 
            type = 2,
            extra = 104,
@@ -118,8 +106,7 @@ rpart.plot(model_cart_final,
 
 # Variable Importance
 
-```{r variable-importance}
-cat("=== 5.5 Variable Importance ===\n\n")
+```{r variable-importance, echo=FALSE, comment=""}
 
 # Extract variable importance
 var_importance <- model_cart_final$variable.importance
@@ -132,7 +119,7 @@ importance_df <- data.frame(
 ) %>%
   arrange(desc(Importance))
 
-kable(head(importance_df, 10), caption = "Top 10 Most Important Variables")
+kable(head(importance_df, 10), caption = " Most Important Variables")
 
 # Create importance plot
 p_importance <- ggplot(head(importance_df, 10), 
@@ -141,7 +128,7 @@ p_importance <- ggplot(head(importance_df, 10),
   geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
   coord_flip() +
   labs(title = "CART Model: Variable Importance",
-       subtitle = "Top 10 Most Important Variables",
+       subtitle = "Most Important Variables",
        x = "Variable",
        y = "Importance (%)") +
   theme_minimal() +
@@ -152,8 +139,7 @@ print(p_importance)
 
 # Model Evaluation
 
-```{r model-evaluation}
-cat("=== 5.6 Model Evaluation ===\n\n")
+```{r model-evaluation, echo=FALSE,comment=""}
 
 # Make predictions
 predictions_class_cart <- predict(model_cart_final, newdata = data_test_cart, type = "class")
@@ -191,7 +177,7 @@ kable(metrics_table_cart, caption = "CART Model Performance Metrics", digits = 2
 
 # ROC Curve
 
-```{r roc-curve, fig.cap="ROC Curve: CART Model"}
+```{r roc-curve, fig.cap="ROC Curve: CART Model", echo=FALSE, comment=""}
 roc_obj_cart <- roc(data_test_cart$readmitted, predictions_prob_cart)
 auc_value_cart <- auc(roc_obj_cart)
 
@@ -218,13 +204,42 @@ print(p_roc_cart)
 
 # Summary
 
-This phase successfully built and evaluated the CART model:
+```{r summary, echo=FALSE, comment="", results='asis'}
+# Calculate summary statistics dynamically
+# Accuracy (already calculated in model-evaluation chunk)
+# AUC (already calculated in roc-curve chunk)
 
-- **Accuracy**: 60.78%
-- **AUC**: 0.605
-- **Tree complexity**: 1 split, 2 nodes (very simple)
-- **Top predictor**: Total previous visits (42.32% importance)
-- **Interpretability**: Very high (simple decision rule)
+# Tree complexity
+n_nodes <- length(unique(model_cart_final$where))
+n_splits <- n_nodes - 1
 
-Proceed to Phase 6 for model comparison.
+# Top predictor (from variable importance)
+if(nrow(importance_df) > 0) {
+  top_predictor_cart <- importance_df$Variable[1]
+  top_predictor_importance <- round(importance_df$Importance_Percent[1], 2)
+  # Clean up variable name for display
+  top_predictor_display_cart <- gsub("_", " ", top_predictor_cart)
+} else {
+  top_predictor_display_cart <- "N/A"
+  top_predictor_importance <- 0
+}
+
+# Determine complexity description
+if(n_splits <= 2) {
+  complexity_desc <- "very simple"
+} else if(n_splits <= 5) {
+  complexity_desc <- "simple"
+} else if(n_splits <= 10) {
+  complexity_desc <- "moderate"
+} else {
+  complexity_desc <- "complex"
+}
+
+cat("- **Accuracy**: ", round(accuracy_cart * 100, 2), "%\n", sep = "")
+cat("- **AUC**: ", round(as.numeric(auc_value_cart), 3), "\n", sep = "")
+cat("- **Tree complexity**: ", n_splits, " split", ifelse(n_splits != 1, "s", ""), ", ", n_nodes, " node", ifelse(n_nodes != 1, "s", ""), " (", complexity_desc, ")\n", sep = "")
+cat("- **Top predictor**: ", top_predictor_display_cart, " (", top_predictor_importance, "% importance)\n", sep = "")
+cat("- **Interpretability**: ", ifelse(n_splits <= 2, "Very high", ifelse(n_splits <= 5, "High", "Moderate")), " (", complexity_desc, " decision rule", ifelse(n_splits != 1, "s", ""), ")\n", sep = "")
+```
+
 

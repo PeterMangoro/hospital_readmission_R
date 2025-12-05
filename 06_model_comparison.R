@@ -215,7 +215,7 @@ justification <- data.frame(
     paste0(round(metrics_logistic$Percentage[metrics_logistic$Metric == "Recall (Sensitivity)"], 2), "%"),
     round(metrics_logistic$Value[metrics_logistic$Metric == "F1-Score"], 4),
     "High (coefficients, odds ratios)",
-    "High (33 parameters)",
+    paste0("High (", nrow(regression_output), " parameters)"),
     "High (p-values, hypothesis tests)"
   ),
   CART = c(
@@ -240,23 +240,35 @@ write.csv(justification, "plots/06_model_justification.csv", row.names = FALSE)
 cat("\n=== 6.5 Key Findings Summary ===\n\n")
 
 cat("1. Performance:\n")
-cat("   - Both models show similar performance (accuracy ~61%)\n")
-cat("   - Logistic Regression has slightly higher AUC (0.648 vs 0.605)\n")
-cat("   - Both models have fair to poor discrimination (AUC < 0.7)\n\n")
+avg_accuracy <- mean(c(metrics_logistic$Percentage[metrics_logistic$Metric == "Accuracy"],
+                       metrics_cart$Percentage[metrics_cart$Metric == "Accuracy"]))
+cat("   - Both models show similar performance (accuracy ~", round(avg_accuracy, 0), "%)\n", sep = "")
+cat("   - Logistic Regression has ", 
+    ifelse(auc_logistic$Value > auc_cart$Value, "higher", "lower"), 
+    " AUC (", round(auc_logistic$Value, 3), " vs ", round(auc_cart$Value, 3), ")\n", sep = "")
+max_auc <- max(auc_logistic$Value, auc_cart$Value)
+cat("   - Both models have ", 
+    ifelse(max_auc < 0.7, "fair to poor", "good"), 
+    " discrimination (AUC < 0.7)\n\n")
 
 cat("2. Interpretability:\n")
-cat("   - CART is simpler (1 split vs 33 parameters)\n")
+n_cart_vars <- nrow(var_importance)
+n_lr_params <- nrow(regression_output)
+cat("   - CART is simpler (", n_cart_vars, " variables vs ", n_lr_params, " parameters)\n", sep = "")
 cat("   - Logistic Regression provides more detailed statistical insights\n")
 cat("   - Both identify previous visits as key predictor\n\n")
 
 cat("3. Key Predictors:\n")
-cat("   - Logistic Regression: n_inpatient (OR: 1.47), age groups, medical specialty\n")
-top_odds <- regression_output[order(-regression_output$Odds_Ratio), ][1:3, ]
-cat("   - Top 3 predictors by OR: ", paste(top_odds$Variable, collapse = ", "), "\n")
-cat("   - CART: total_previous_visits (42% importance)\n\n")
+# Get top predictor from logistic regression
+top_lr_predictor <- regression_output[order(-regression_output$Odds_Ratio), ][1, ]
+cat("   - Logistic Regression: ", top_lr_predictor$Variable, " (OR: ", round(top_lr_predictor$Odds_Ratio, 2), "), age groups, medical specialty\n", sep = "")
+top_odds <- regression_output[order(-regression_output$Odds_Ratio), ][1:min(3, nrow(regression_output)), ]
+cat("   - Top 3 predictors by OR: ", paste(top_odds$Variable, collapse = ", "), "\n", sep = "")
+cat("   - CART: ", var_importance$Variable[1], " (", 
+    round(var_importance$Importance_Percent[1], 2), "% importance)\n\n", sep = "")
 
 cat("4. Model Selection:\n")
-cat("   - For prediction: Logistic Regression (slightly better performance)\n")
+cat("   - For prediction: ", best_model, " (", reason, ")\n", sep = "")
 cat("   - For simplicity: CART (very interpretable)\n")
 cat("   - For statistical rigor: Logistic Regression (p-values, confidence intervals)\n\n")
 
