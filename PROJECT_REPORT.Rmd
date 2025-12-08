@@ -184,10 +184,10 @@ top_predictor_lr <- sig_vars$Variable[1]
 top_predictor_lr_or <- round(sig_vars$Odds_Ratio[1], 2)
 
 top_predictor_cart <- var_imp_cart$Variable[1]
-top_predictor_cart_imp <- round(var_imp_cart$Importance[1], 2)
+top_predictor_cart_imp <- round(var_imp_cart$Importance_Percent[1], 2)
 
 top_predictor_rf <- var_imp_rf$Variable[1]
-top_predictor_rf_imp <- round(var_imp_rf$Importance[1], 2)
+top_predictor_rf_imp <- round(var_imp_rf$Importance_Percent[1], 2)
 
 # Summary statistics
 time_in_hosp_mean <- round(mean(data_clean$time_in_hospital), 2)
