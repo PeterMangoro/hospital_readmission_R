@@ -66,7 +66,11 @@ encode_for_logistic <- function(inputs) {
   
   # Medical specialty
   medspec_dummies <- model.matrix(~ medical_specialty - 1, data = temp_df)
-  colnames(medspec_dummies) <- paste0("medspec_", gsub(" ", "_", colnames(medspec_dummies)))
+  # Match training data format: "medspec_medical_specialtyEmergency.Trauma"
+  # Training data has dots (.) not slashes (/), so we need to convert "/" to "."
+  # Original code: paste0("medspec_", gsub(" ", "_", colnames(medspec_dummies)))
+  # But we also need to convert "/" to "." to match training data
+  colnames(medspec_dummies) <- paste0("medspec_", gsub(" ", "_", gsub("/", ".", colnames(medspec_dummies))))
   
   # Primary diagnosis
   diag1_dummies <- model.matrix(~ diag_1 - 1, data = temp_df)
@@ -80,9 +84,9 @@ encode_for_logistic <- function(inputs) {
   a1c_dummies <- model.matrix(~ A1Ctest - 1, data = temp_df)
   colnames(a1c_dummies) <- paste0("a1c_", tolower(colnames(a1c_dummies)))
   
-  # Binary variables
-  change_binary <- as.numeric(inputs$change == "yes" | inputs$change == "Ch")
-  diabetes_med_binary <- as.numeric(inputs$diabetes_med == "Yes")
+  # Binary variables (must match training data encoding exactly)
+  change_binary <- as.numeric(inputs$change == "yes")
+  diabetes_med_binary <- as.numeric(inputs$diabetes_med == "yes")
   
   # Combine all features into data frame
   data_logistic_format <- data.frame(

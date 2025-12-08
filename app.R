@@ -75,7 +75,7 @@ ui <- fluidPage(
       
       h4("Diagnoses"),
       numericInput("n_diagnoses", "Number of Diagnoses", 
-                   value = 9, min = 1, max = 16, step = 1),
+                   value = 3, min = 1, max = 16, step = 1),
       
       # Categorical inputs
       h4("Demographics & Medical Info"),
