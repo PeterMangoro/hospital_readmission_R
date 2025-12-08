@@ -1,0 +1,12 @@
+name: hospitalreadmission
+title: hospitalreadmission
+username: petermangoro
+account: petermangoro
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16262309
+bundleId: 11288487
+url: https://petermangoro.shinyapps.io/hospitalreadmission/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

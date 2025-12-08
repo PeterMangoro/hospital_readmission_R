@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Masheia Dzimba and Peter Mangoro" />
+
+<meta name="date" content="2025-12-07" />
+
+<title>Predicting Hospital Readmissions: A Machine Learning Journey</title>
+
+<script src="BLOG_POST_files/header-attrs-2.30/header-attrs.js"></script>
+<script src="BLOG_POST_files/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="BLOG_POST_files/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="BLOG_POST_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="BLOG_POST_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="BLOG_POST_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="BLOG_POST_files/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="BLOG_POST_files/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="BLOG_POST_files/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="BLOG_POST_files/navigation-1.1/tabsets.js"></script>
+<script src="BLOG_POST_files/navigation-1.1/codefolding.js"></script>
+<script src="BLOG_POST_files/kePrint-0.0.1/kePrint.js"></script>
+<link href="BLOG_POST_files/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Predicting Hospital Readmissions: A Machine
+Learning Journey</h1>
+<h3 class="subtitle">How I Built Three Models to Predict 30-Day
+Readmissions in Diabetes Patients</h3>
+<h4 class="author">Masheia Dzimba and Peter Mangoro</h4>
+<h4 class="date">2025-12-07</h4>
+
+</div>
+
+
+<div id="the-problem-why-hospital-readmissions-matter"
+class="section level1">
+<h1>The Problem: Why Hospital Readmissions Matter</h1>
+<p>Imagine you’re a hospital administrator. Every day, you see patients
+being discharged, and you wonder: <em>“Will this patient be back within
+30 days?”</em></p>
+<p>Hospital readmissions are a <strong>$15 billion problem</strong> in
+the United States. For patients with diabetes, the stakes are even
+higher—they’re more likely to be readmitted, which means:</p>
+<ul>
+<li><strong>Higher costs</strong> for healthcare systems</li>
+<li><strong>Worse outcomes</strong> for patients<br />
+</li>
+<li><strong>Strain on resources</strong> that could be better
+allocated</li>
+</ul>
+<p>But what if we could predict which patients are at high risk of
+readmission? That’s exactly what I set out to do in this project.</p>
+</div>
+<div id="the-data-25000-patient-stories" class="section level1">
+<h1>The Data: 25,000 Patient Stories</h1>
+<p>I worked with a dataset of <strong>24996 patient encounters</strong>
+from 130 US hospitals over 10 years (1999-2008). Each row tells a
+story:</p>
+<ul>
+<li>How long did they stay in the hospital?</li>
+<li>How many medications were they on?</li>
+<li>What was their primary diagnosis?</li>
+<li>Had they been to the hospital before?</li>
+</ul>
+<p>The dataset had a <strong>47.02% readmission rate</strong>—nearly
+half of all patients came back within 30 days. This is a significant
+problem that needs solving.</p>
+<div class="figure" style="text-align: center">
+<img src="blog_assets/images/readmission-viz-1.png" alt="Distribution of Readmitted vs. Not Readmitted Patients" width="80%" />
+<p class="caption">
+Distribution of Readmitted vs. Not Readmitted Patients
+</p>
+</div>
+</div>
+<div id="my-approach-three-models-one-goal" class="section level1">
+<h1>My Approach: Three Models, One Goal</h1>
+<p>I decided to build <strong>three different machine learning
+models</strong> to see which approach worked best:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Logistic Regression</strong> - The classic statistical
+approach, great for interpretability</li>
+<li><strong>CART (Decision Trees)</strong> - Simple, visual, easy to
+explain</li>
+<li><strong>Random Forest</strong> - An ensemble method that combines
+many trees</li>
+</ol>
+<p>Each model has its strengths, and I wanted to see which one would
+give us the best predictions.</p>
+<div id="model-1-logistic-regression" class="section level2">
+<h2>Model 1: Logistic Regression</h2>
+<p>Logistic Regression was my starting point. It’s interpretable and
+provides odds ratios that clinicians can understand.</p>
+<p><strong>Key Insight</strong>: The model showed that
+<strong>n_inpatient</strong> (OR: 1.47) was the strongest predictor of
+readmission. Patients with more previous visits had significantly higher
+odds of being readmitted.</p>
+<p><strong>Logistic Regression Performance:</strong></p>
+<ul>
+<li><strong>Accuracy</strong>: 61.84 %</li>
+<li><strong>AUC-ROC</strong>: 0.648</li>
+<li><strong>Interpretability</strong>: ⭐⭐⭐⭐⭐ (Excellent - provides
+odds ratios and p-values)</li>
+</ul>
+<div class="figure" style="text-align: center">
+<img src="plots/04_roc_curve_ggplot.png" alt="ROC Curve: Logistic Regression Model" width="70%" />
+<p class="caption">
+ROC Curve: Logistic Regression Model
+</p>
+</div>
+</div>
+<div id="model-2-cart-decision-trees" class="section level2">
+<h2>Model 2: CART (Decision Trees)</h2>
+<p>Decision trees are like a flowchart—they ask yes/no questions to
+classify patients. I loved how visual and intuitive this approach
+was.</p>
+<p>The tree showed that <strong>total_previous_visits</strong> (42.32%
+importance) was the most important factor, splitting patients into
+high-risk and low-risk groups.</p>
+<p><strong>CART Performance:</strong></p>
+<ul>
+<li><strong>Accuracy</strong>: 60.78 %</li>
+<li><strong>AUC-ROC</strong>: 0.605</li>
+<li><strong>Interpretability</strong>: ⭐⭐⭐⭐ (Great - visual decision
+rules)</li>
+</ul>
+<div class="figure" style="text-align: center">
+<img src="plots/05_cart_tree_compact.png" alt="CART Decision Tree Visualization" width="80%" />
+<p class="caption">
+CART Decision Tree Visualization
+</p>
+</div>
+</div>
+<div id="model-3-random-forest" class="section level2">
+<h2>Model 3: Random Forest</h2>
+<p>Random Forest combines hundreds of decision trees, each trained on a
+different subset of the data. It’s like asking a committee of experts
+instead of just one.</p>
+<p><strong>Random Forest Performance:</strong></p>
+<ul>
+<li><strong>Accuracy</strong>: 61.46 %</li>
+<li><strong>AUC-ROC</strong>: 0.648</li>
+<li><strong>Interpretability</strong>: ⭐⭐⭐ (Good - shows feature
+importance)</li>
+</ul>
+<div class="figure" style="text-align: center">
+<img src="blog_assets/images/rf-importance-1.png" alt="Random Forest: Top 10 Most Important Variables" width="80%" />
+<p class="caption">
+Random Forest: Top 10 Most Important Variables
+</p>
+</div>
+</div>
+</div>
+<div id="the-results-what-we-learned" class="section level1">
+<h1>The Results: What We Learned</h1>
+<div id="performance-comparison" class="section level2">
+<h2>Performance Comparison</h2>
+<table class="table table-striped table-hover" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+Model Performance Comparison
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Model
+</th>
+<th style="text-align:center;">
+Accuracy
+</th>
+<th style="text-align:center;">
+AUC
+</th>
+<th style="text-align:left;">
+Interpretability
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Logistic Regression
+</td>
+<td style="text-align:center;">
+61.84%
+</td>
+<td style="text-align:center;">
+0.648
+</td>
+<td style="text-align:left;">
+⭐⭐⭐⭐⭐ |
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+CART
+</td>
+<td style="text-align:center;">
+60.78%
+</td>
+<td style="text-align:center;">
+0.605
+</td>
+<td style="text-align:left;">
+⭐⭐⭐⭐ |
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Random Forest
+</td>
+<td style="text-align:center;">
+61.46%
+</td>
+<td style="text-align:center;">
+0.648
+</td>
+<td style="text-align:left;">
+⭐⭐⭐ |
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="key-findings" class="section level2">
+<h2>Key Findings</h2>
+<ol style="list-style-type: decimal">
+<li><p><strong>All three models performed similarly</strong> (~60-62%
+accuracy), suggesting the problem is inherently challenging with the
+available features.</p></li>
+<li><p><strong>Previous hospital visits</strong> consistently emerged as
+the strongest predictor across all models. This makes intuitive
+sense—patients with complex medical histories are more likely to need
+readmission.</p></li>
+<li><p><strong>Number of diagnoses</strong> was another important
+factor. Patients with multiple conditions are at higher risk.</p></li>
+<li><p><strong>Medical specialty</strong> mattered too. Patients seen in
+Emergency/Trauma departments had higher readmission rates.</p></li>
+</ol>
+</div>
+<div id="roc-curves-visualizing-model-performance"
+class="section level2">
+<h2>ROC Curves: Visualizing Model Performance</h2>
+<div class="figure" style="text-align: center">
+<img src="plots/06_auc_comparison.png" alt="ROC Curves Comparing All Three Models" width="80%" />
+<p class="caption">
+ROC Curves Comparing All Three Models
+</p>
+</div>
+</div>
+</div>
+<div id="what-i-learned-challenges-and-insights" class="section level1">
+<h1>What I Learned: Challenges and Insights</h1>
+<div id="the-challenge-of-60-accuracy" class="section level2">
+<h2>The Challenge of ~60% Accuracy</h2>
+<p>At first, I was disappointed with ~60% accuracy. But then I
+realized:</p>
+<ul>
+<li><strong>This is a hard problem</strong>. Even experienced clinicians
+struggle to predict readmissions.</li>
+<li><strong>The dataset has limitations</strong>. We’re missing
+important clinical variables like lab values, vital signs, and social
+determinants of health.</li>
+<li><strong>60% is a starting point</strong>. With better features and
+more data, we could improve significantly.</li>
+</ul>
+</div>
+<div id="what-would-improve-the-model" class="section level2">
+<h2>What Would Improve the Model?</h2>
+<p>If I had access to more data, I would add:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Lab values</strong>: Blood glucose, HbA1c, creatinine,
+etc.</li>
+<li><strong>Vital signs</strong>: Blood pressure, heart rate,
+temperature</li>
+<li><strong>Social determinants</strong>: Insurance type, socioeconomic
+status, housing stability</li>
+<li><strong>Medication adherence</strong>: Are patients taking their
+medications as prescribed?</li>
+<li><strong>Follow-up care</strong>: Did patients attend follow-up
+appointments?</li>
+</ol>
+</div>
+<div id="the-power-of-interpretability" class="section level2">
+<h2>The Power of Interpretability</h2>
+<p>One of my biggest takeaways was the importance of
+<strong>interpretability</strong> in healthcare. Clinicians need to
+understand <em>why</em> a model makes a prediction, not just that it
+does. That’s why Logistic Regression, despite similar performance, might
+be more useful in practice—it provides odds ratios and statistical
+significance that doctors can interpret.</p>
+</div>
+</div>
+<div id="building-an-interactive-dashboard" class="section level1">
+<h1>Building an Interactive Dashboard</h1>
+<p>To make this project more practical, I created a <strong>Shiny web
+application</strong> where users can input patient information and get
+real-time readmission risk predictions from all three models.</p>
+<p>The app allows healthcare providers to: - Input patient demographics
+and medical history - See predictions from all three models - Compare
+model probabilities - View feature importance and ROC curves</p>
+</div>
+<div id="technical-stack" class="section level1">
+<h1>Technical Stack</h1>
+<p>For those interested in the technical details:</p>
+<ul>
+<li><strong>Language</strong>: R</li>
+<li><strong>Libraries</strong>: <code>caret</code>, <code>rpart</code>,
+<code>randomForest</code>, <code>pROC</code>, <code>ggplot2</code>,
+<code>dplyr</code></li>
+<li><strong>Visualization</strong>: <code>ggplot2</code>,
+<code>rpart.plot</code></li>
+<li><strong>Interactive App</strong>: R Shiny</li>
+<li><strong>Report Generation</strong>: R Markdown</li>
+</ul>
+</div>
+<div id="conclusion-whats-next" class="section level1">
+<h1>Conclusion: What’s Next?</h1>
+<p>This project taught me that <strong>predicting healthcare outcomes is
+complex</strong>, but machine learning can provide valuable insights.
+While 60% accuracy might not seem impressive, it’s a solid foundation
+that could be improved with:</p>
+<ul>
+<li>Better feature engineering</li>
+<li>More clinical variables</li>
+<li>Advanced techniques like gradient boosting</li>
+<li>Ensemble methods combining all three models</li>
+</ul>
+<p>Most importantly, I learned that in healthcare,
+<strong>interpretability matters just as much as accuracy</strong>. A
+model that doctors can understand and trust is often more valuable than
+a black box with slightly better performance.</p>
+<hr />
+<div id="try-it-yourself" class="section level2">
+<h2>Try It Yourself</h2>
+<ul>
+<li><strong>📊 <a href="PROJECT_REPORT.pdf">View the Full
+Report</a></strong> - Detailed technical analysis</li>
+<li><strong>💻 <a
+href="https://github.com/yourusername/hospital-readmissions">GitHub
+Repository</a></strong> - Full code and data</li>
+<li><strong>🚀 <a
+href="https://your-app-url.shinyapps.io/hospital-readmissions/">Interactive
+Dashboard</a></strong> - Try the models yourself</li>
+</ul>
+<hr />
+<p><em>This project was completed as part of a Computational Mathematics
+course. All code and analysis are available on GitHub.</em></p>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
