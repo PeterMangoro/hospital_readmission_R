@@ -1,16 +1,14 @@
 # Verification Script: Compare All Model Predictions (Rmd vs Shiny)
 # This script verifies that Logistic Regression, CART, and Random Forest
-# predictions match between the Rmd report and Shiny app
+# predictions should match between the Rmd report and Shiny app
 
 library(caret)
 library(pROC)
 library(randomForest)
 
-cat("=== Verification: All Model Predictions (Rmd vs Shiny) ===\n\n")
+cat("Verification: All Model Predictions (Rmd vs Shiny) \n\n")
 
-# ============================================================================
 # 1. Load Models and Data
-# ============================================================================
 cat("1. Loading models and data...\n")
 load("model_logistic.RData")
 load("model_cart_final.RData")

@@ -208,7 +208,7 @@ best_accuracy <- max(accuracy_lr, accuracy_cart, accuracy_rf)
 
 # Abstract
 
-This study aims to predict 30-day hospital readmissions for patients with diabetes using patient demographic, diagnostic, and treatment-related features. We employed three statistical modeling approaches: **Logistic Regression**, **Classification and Regression Trees (CART)**, and **Random Forest** (an ensemble method). The dataset consists of `r n_total` patient encounters from 130 US hospitals collected between 1999-2008. Our analysis identified `r top_predictor_lr` (OR: `r top_predictor_lr_or`), `r top_predictor_cart` (`r top_predictor_cart_imp`% importance), and `r top_predictor_rf` (`r top_predictor_rf_imp`% importance) as key predictors of readmission across the three models. The Logistic Regression model achieved an accuracy of `r accuracy_lr`% and AUC of `r auc_lr_value`, CART achieved `r accuracy_cart`% accuracy and AUC of `r auc_cart_value`, while Random Forest achieved `r accuracy_rf`% accuracy and AUC of `r auc_rf_value`. The **`r best_model`** model demonstrates the best predictive performance (AUC = `r best_auc`, Accuracy = `r best_accuracy`%). All models show moderate predictive performance, suggesting that additional clinical variables may be needed to improve predictions. The Logistic Regression model provides more detailed statistical insights with odds ratios and significance testing, making it preferable for clinical decision support. This analysis highlights the importance of patient history and demographics in predicting readmission risk, with implications for healthcare resource allocation and patient care planning.
+This study aims to predict 30-day hospital readmissions for patients with diabetes using patient demographic, diagnostic, and treatment-related features. We employed three statistical modeling approaches: **Logistic Regression**, **Classification and Regression Trees (CART)**, and **Random Forest** (an ensemble method). The dataset consists of `r n_total` patient encounters from 130 US hospitals collected between 1999-2008. Our analysis identified `r top_predictor_lr` (OR: `r top_predictor_lr_or`), `r top_predictor_cart` (`r top_predictor_cart_imp`% importance), and `r top_predictor_rf` (`r top_predictor_rf_imp`% importance) as key predictors of readmission across the three models. The Logistic Regression model achieved an accuracy of `r accuracy_lr`% and AUC of `r auc_lr_value`, CART achieved `r accuracy_cart`% accuracy and AUC of `r auc_cart_value`, while Random Forest achieved `r accuracy_rf`% accuracy and AUC of `r auc_rf_value`. The **`r best_model`** model demonstrates the best predictive performance (AUC = `r best_auc`, Accuracy = `r best_accuracy`%). All models show moderate predictive performance, suggesting that additional clinical variables may be needed to improve predictions. The Logistic Regression model provides more detailed statistical insights with odds ratios and significance testing, making it preferable for clinical decision support. This analysis highlights the importance of patient history and demographics in predicting readmission risk, with implications for healthcare resource allocation and patient care planning. An interactive web application has been developed to allow users to explore model predictions with custom inputs: \url{https://petermangoro.shinyapps.io/hospitalreadmission/}
 
 # Introduction
 
@@ -226,6 +226,10 @@ Hospital readmissions within 30 days of discharge are a significant concern in h
 2. Compare the performance of Logistic Regression, CART, and Random Forest models
 3. Evaluate model interpretability and clinical utility
 4. Provide recommendations for clinical application
+
+## Interactive Dashboard
+
+An interactive web application has been developed using R Shiny to allow users to explore model predictions with custom patient inputs. The application provides real-time predictions from all three models (Logistic Regression, CART, and Random Forest), along with visualizations and model comparison metrics. Access the interactive dashboard at: \url{https://petermangoro.shinyapps.io/hospitalreadmission/}
 
 # Data Description
 
@@ -1270,7 +1274,7 @@ Models using clinical data (lab values, vital signs) typically achieve higher AU
    - Prospective validation in clinical setting
 
 4. **Clinical Integration**:
-   - Develop user-friendly risk calculator
+   - Develop user-friendly risk calculator (implemented as interactive Shiny app: \url{https://petermangoro.shinyapps.io/hospitalreadmission/})
    - Integrate with electronic health record systems
    - Create clinical decision support tools
 
