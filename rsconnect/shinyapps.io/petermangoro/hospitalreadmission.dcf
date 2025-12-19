@@ -5,9 +5,8 @@ account: petermangoro
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16262309
-bundleId: 11294367
+bundleId: 11347782
 url: https://petermangoro.shinyapps.io/hospitalreadmission/
 version: 1
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: content/blog/hospital-readmissions.md|convert_to_nuxt.R|blog_assets|BLOG_POST_files

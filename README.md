@@ -225,12 +225,11 @@ To ensure reproducibility:
 
 ## Authors
 
-- Masheia Dzimba
 - Peter Mangoro
 
 ## References
 
-Kaggle. "Diabetes 130-US Hospitals for 10 years." Accessed November 14, 2025. https://www.kaggle.com/datasets/brandao/diabetes
+Kaggle. "Diabetes 130-US Hospitals for 10 years." Accessed November 14, 2025. https://www.kaggle.com/datasets/dubradave/hospital-readmissions/data
 
 ## License
 

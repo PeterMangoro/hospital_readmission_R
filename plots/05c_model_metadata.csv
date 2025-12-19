@@ -1,0 +1,7 @@
+"Parameter","Value"
+"nrounds",200
+"max_depth",6
+"eta",0.1
+"subsample",0.8
+"colsample_bytree",0.8
+"best_iteration",200

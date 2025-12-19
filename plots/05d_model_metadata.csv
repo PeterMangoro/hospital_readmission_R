@@ -1,0 +1,6 @@
+"Parameter","Value"
+"hidden_units",10
+"decay",0.1
+"maxit",200
+"niter",200
+"convergence",1

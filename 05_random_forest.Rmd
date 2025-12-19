@@ -1,6 +1,6 @@
 ---
 title: "Phase 5b: Random Forest Model"
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-12-06"
 output: 
   pdf_document:

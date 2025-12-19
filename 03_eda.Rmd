@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Exploratory Data Analysis"
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-11-30"
 output: 
   pdf_document:

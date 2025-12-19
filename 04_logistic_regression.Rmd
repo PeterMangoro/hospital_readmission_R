@@ -1,6 +1,6 @@
 ---
 title: 'Phase 4: Logistic Regression Model'
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-12-02"
 output:
   pdf_document:

@@ -1,6 +1,6 @@
 ---
 title: "Predicting 30-Day Hospital Readmissions: A Comparative Analysis Using Logistic Regression, CART, and Random Forest"
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-12-07"
 output: 
   pdf_document:
@@ -70,6 +70,7 @@ reg_output <- read.csv("plots/04_regression_output.csv")
 # Load variable importance
 var_imp_cart <- read.csv("plots/05_variable_importance.csv")
 var_imp_rf <- read.csv("plots/05b_variable_importance.csv")
+var_imp_xgb <- read.csv("plots/05c_variable_importance.csv")
 
 # Load model comparison
 comp_table <- read.csv("plots/06_model_comparison.csv")
@@ -81,6 +82,28 @@ if(file.exists("plots/05b_model_metadata.csv")) {
 } else {
   n_trees_rf <- 500
 }
+
+# Load XGBoost metadata
+if(file.exists("plots/05c_model_metadata.csv")) {
+  model_metadata_xgb <- read.csv("plots/05c_model_metadata.csv")
+  best_iter_xgb <- model_metadata_xgb$Value[model_metadata_xgb$Parameter == "best_iteration"]
+} else {
+  best_iter_xgb <- 200
+}
+
+# Load Neural Network metadata
+if(file.exists("plots/05d_model_metadata.csv")) {
+  model_metadata_nn <- read.csv("plots/05d_model_metadata.csv")
+  hidden_units_nn <- model_metadata_nn$Value[model_metadata_nn$Parameter == "hidden_units"]
+} else {
+  hidden_units_nn <- 10
+}
+
+# Load XGBoost and Neural Network metrics
+metrics_xgb <- read.csv("plots/05c_performance_metrics.csv")
+metrics_nn <- read.csv("plots/05d_performance_metrics.csv")
+auc_xgb <- read.csv("plots/05c_auc.csv")
+auc_nn <- read.csv("plots/05d_auc.csv")
 
 # Build logistic regression model for use in report
 set.seed(1)
@@ -229,7 +252,7 @@ Hospital readmissions within 30 days of discharge are a significant concern in h
 
 ## Interactive Dashboard
 
-An interactive web application has been developed using R Shiny to allow users to explore model predictions with custom patient inputs. The application provides real-time predictions from all three models (Logistic Regression, CART, and Random Forest), along with visualizations and model comparison metrics. Access the interactive dashboard at: \url{https://petermangoro.shinyapps.io/hospitalreadmission/}
+An interactive web application has been developed using R Shiny to allow users to explore model predictions with custom patient inputs. The application provides real-time predictions from all five models (Logistic Regression, CART, Random Forest, XGBoost, and Neural Network), along with visualizations and model comparison metrics. Access the interactive dashboard at: \url{https://petermangoro.shinyapps.io/hospitalreadmission/}
 
 # Data Description
 
@@ -1025,25 +1048,255 @@ print(p_roc_rf)
 
 \FloatBarrier
 
+# XGBoost Model
+
+## Model Overview
+
+XGBoost (Extreme Gradient Boosting) is an advanced ensemble method that builds upon gradient boosting. It uses a more regularized model formalization to control overfitting, making it robust and efficient. XGBoost sequentially builds decision trees, where each new tree corrects the errors of the previous ones, ultimately creating a strong predictive model.
+
+## Model Training
+
+```{r xgb-model, echo=FALSE, comment=""}
+# Load XGBoost model
+if(file.exists("model_xgb.RData")) {
+  load("model_xgb.RData")
+  cat("XGBoost model loaded successfully.\n")
+  best_iter_val <- ifelse(is.null(model_xgb$best_iteration) || length(model_xgb$best_iteration) == 0, 
+                         200, as.numeric(model_xgb$best_iteration[1]))
+  cat("Best iteration: ", best_iter_val, "\n")
+  # Get best score from evaluation log
+  if(!is.null(model_xgb$evaluation_log) && nrow(model_xgb$evaluation_log) > 0 && best_iter_val <= nrow(model_xgb$evaluation_log)) {
+    best_auc <- model_xgb$evaluation_log$test_auc[best_iter_val]
+    cat("Best AUC: ", round(best_auc, 4), "\n")
+  } else {
+    cat("Model training completed\n")
+  }
+} else {
+  cat("XGBoost model not found. Please run save_models.R first.\n")
+}
+```
+
+## Model Evaluation
+
+```{r xgb-evaluation, echo=FALSE, results='asis'}
+kable(metrics_xgb, caption = "XGBoost Model Performance Metrics", row.names = FALSE, digits = 2) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
+```
+
+## Confusion Matrix
+
+```{r confusion-matrix-xgb, echo=FALSE, comment=""}
+# Make predictions if model is loaded
+if(exists("model_xgb")) {
+  library(xgboost)
+  # Prepare test data for XGBoost
+  data_test_xgb_numeric <- data_test_cart
+  for(col in colnames(data_test_xgb_numeric)) {
+    if(is.factor(data_test_xgb_numeric[[col]]) && col != "readmitted") {
+      data_test_xgb_numeric[[col]] <- as.numeric(data_test_xgb_numeric[[col]]) - 1
+    }
+  }
+  X_test_xgb <- as.matrix(data_test_xgb_numeric[, colnames(data_test_xgb_numeric) != "readmitted"])
+  dtest_xgb <- xgb.DMatrix(data = X_test_xgb)
+  predictions_prob_xgb <- predict(model_xgb, newdata = dtest_xgb)
+  predictions_class_xgb <- ifelse(predictions_prob_xgb > 0.5, "Readmitted", "Not_Readmitted")
+  predictions_class_xgb <- factor(predictions_class_xgb, levels = c("Not_Readmitted", "Readmitted"))
+  
+  # Convert to Yes/No labels
+  predicted_labels_xgb <- ifelse(predictions_class_xgb == "Readmitted", "Yes", "No")
+  actual_labels_xgb <- ifelse(data_test_cart$readmitted == "Readmitted", "Yes", "No")
+  conf_matrix_xgb <- table(Predicted = predicted_labels_xgb, Actual = actual_labels_xgb)
+  
+  # Reorder to show Yes first, then No
+  conf_matrix_xgb <- conf_matrix_xgb[c("Yes", "No"), c("Yes", "No")]
+  
+  # Create a data frame with clear labels
+  conf_matrix_xgb_df <- as.data.frame.matrix(conf_matrix_xgb)
+  conf_matrix_xgb_df$Predicted <- rownames(conf_matrix_xgb_df)
+  conf_matrix_xgb_df <- conf_matrix_xgb_df[, c("Predicted", "Yes", "No")]
+  
+  # Add totals row
+  conf_matrix_xgb_df <- rbind(conf_matrix_xgb_df, 
+                              data.frame(Predicted = "Total", 
+                                         Yes = sum(conf_matrix_xgb_df$Yes), 
+                                         No = sum(conf_matrix_xgb_df$No)))
+  
+  # Rename columns to show "Actual"
+  colnames(conf_matrix_xgb_df) <- c("Predicted", "Actual: Yes", "Actual: No")
+  
+  kable(conf_matrix_xgb_df, caption = "Confusion Matrix: XGBoost Model - Predicted vs. Actual Readmission Status", 
+        row.names = FALSE, align = "lcc") %>%
+    kable_styling(latex_options = c("striped", "hold_position"), font_size = 9) %>%
+    column_spec(1, width = "3cm", bold = TRUE)
+}
+```
+
+## Variable Importance
+
+```{r xgb-importance, echo=FALSE, results='asis'}
+kable(head(var_imp_xgb, 10), caption = "Top 10 Most Important Variables in XGBoost Model", row.names = FALSE, digits = 2) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
+```
+
+## ROC Curve
+
+```{r roc-xgb, fig.cap=paste("ROC Curve: XGBoost Model (AUC =", round(auc_xgb$Value, 3), ")"), echo=FALSE, comment="", out.width="0.7\\textwidth", fig.pos="H"}
+if(exists("model_xgb") && exists("predictions_prob_xgb")) {
+  actual_numeric_xgb <- ifelse(data_test_cart$readmitted == "Readmitted", 1, 0)
+  roc_obj_xgb <- roc(actual_numeric_xgb, predictions_prob_xgb)
+  auc_value_xgb_plot <- auc(roc_obj_xgb)
+  
+  cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_xgb_plot), 4), "\n")
+  
+  # Create ROC plot
+  roc_data_xgb <- data.frame(
+    FPR = 1 - roc_obj_xgb$specificities,
+    TPR = roc_obj_xgb$sensitivities
+  )
+  
+  p_roc_xgb <- ggplot(roc_data_xgb, aes(x = FPR, y = TPR)) +
+    geom_line(color = "purple", linewidth = 1.2) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+    labs(title = "ROC Curve: XGBoost Model",
+         subtitle = paste("AUC =", round(as.numeric(auc_value_xgb_plot), 4)),
+         x = "False Positive Rate (1 - Specificity)",
+         y = "True Positive Rate (Sensitivity)") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, size = 12))
+  print(p_roc_xgb)
+}
+```
+
+\FloatBarrier
+
+# Neural Network Model
+
+## Model Overview
+
+Neural Networks are non-linear models inspired by biological neural networks. They consist of interconnected nodes (neurons) organized in layers that can learn complex patterns in data. For this binary classification task, we use a feedforward neural network with one hidden layer, which can capture non-linear relationships between features and the target variable.
+
+## Model Training
+
+```{r nn-model, echo=FALSE, comment=""}
+# Load Neural Network model
+if(file.exists("model_nn.RData")) {
+  load("model_nn.RData")
+  cat("Neural Network model loaded successfully.\n")
+  cat("Architecture: ", model_nn$n[1], " input -> ", model_nn$n[2], 
+      " hidden -> ", model_nn$n[3], " output\n", sep = "")
+  cat("Total weights: ", length(model_nn$wts), "\n")
+  cat("Convergence: ", ifelse(model_nn$convergence == 0, "Yes", "No"), "\n")
+} else {
+  cat("Neural Network model not found. Please run save_models.R first.\n")
+}
+```
+
+## Model Evaluation
+
+```{r nn-evaluation, echo=FALSE, results='asis'}
+kable(metrics_nn, caption = "Neural Network Model Performance Metrics", row.names = FALSE, digits = 2) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
+```
+
+## Confusion Matrix
+
+```{r confusion-matrix-nn, echo=FALSE, comment=""}
+# Make predictions if model is loaded
+if(exists("model_nn")) {
+  load("scaling_params_nn.RData")
+  X_test_nn <- model.matrix(~ . - readmitted, data = data_test_cart)[, -1]
+  X_test_nn_scaled <- scale(X_test_nn, 
+                            center = scaling_params$center,
+                            scale = scaling_params$scale)
+  predictions_prob_nn <- predict(model_nn, newdata = X_test_nn_scaled, type = "raw")
+  predictions_class_nn <- ifelse(predictions_prob_nn > 0.5, "Readmitted", "Not_Readmitted")
+  predictions_class_nn <- factor(predictions_class_nn, levels = c("Not_Readmitted", "Readmitted"))
+  
+  # Convert to Yes/No labels
+  predicted_labels_nn <- ifelse(predictions_class_nn == "Readmitted", "Yes", "No")
+  actual_labels_nn <- ifelse(data_test_cart$readmitted == "Readmitted", "Yes", "No")
+  conf_matrix_nn <- table(Predicted = predicted_labels_nn, Actual = actual_labels_nn)
+  
+  # Reorder to show Yes first, then No
+  conf_matrix_nn <- conf_matrix_nn[c("Yes", "No"), c("Yes", "No")]
+  
+  # Create a data frame with clear labels
+  conf_matrix_nn_df <- as.data.frame.matrix(conf_matrix_nn)
+  conf_matrix_nn_df$Predicted <- rownames(conf_matrix_nn_df)
+  conf_matrix_nn_df <- conf_matrix_nn_df[, c("Predicted", "Yes", "No")]
+  
+  # Add totals row
+  conf_matrix_nn_df <- rbind(conf_matrix_nn_df, 
+                            data.frame(Predicted = "Total", 
+                                       Yes = sum(conf_matrix_nn_df$Yes), 
+                                       No = sum(conf_matrix_nn_df$No)))
+  
+  # Rename columns to show "Actual"
+  colnames(conf_matrix_nn_df) <- c("Predicted", "Actual: Yes", "Actual: No")
+  
+  kable(conf_matrix_nn_df, caption = "Confusion Matrix: Neural Network Model - Predicted vs. Actual Readmission Status", 
+        row.names = FALSE, align = "lcc") %>%
+    kable_styling(latex_options = c("striped", "hold_position"), font_size = 9) %>%
+    column_spec(1, width = "3cm", bold = TRUE)
+}
+```
+
+## ROC Curve
+
+```{r roc-nn, fig.cap=paste("ROC Curve: Neural Network Model (AUC =", round(auc_nn$Value, 3), ")"), echo=FALSE, comment="", out.width="0.7\\textwidth", fig.pos="H"}
+if(exists("model_nn") && exists("predictions_prob_nn")) {
+  actual_numeric_nn <- ifelse(data_test_cart$readmitted == "Readmitted", 1, 0)
+  roc_obj_nn <- roc(actual_numeric_nn, as.vector(predictions_prob_nn))
+  auc_value_nn_plot <- auc(roc_obj_nn)
+  
+  cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_nn_plot), 4), "\n")
+  
+  # Create ROC plot
+  roc_data_nn <- data.frame(
+    FPR = 1 - roc_obj_nn$specificities,
+    TPR = roc_obj_nn$sensitivities
+  )
+  
+  p_roc_nn <- ggplot(roc_data_nn, aes(x = FPR, y = TPR)) +
+    geom_line(color = "darkorange", linewidth = 1.2) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+    labs(title = "ROC Curve: Neural Network Model",
+         subtitle = paste("AUC =", round(as.numeric(auc_value_nn_plot), 4)),
+         x = "False Positive Rate (1 - Specificity)",
+         y = "True Positive Rate (Sensitivity)") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, size = 12))
+  print(p_roc_nn)
+}
+```
+
+\FloatBarrier
+
 # Feature Importance Comparison
 
 ```{r feature-comparison, echo=FALSE, results='asis'}
-# Compare top 5 predictors across all three models
+# Compare top 5 predictors across all five models
 top5_lr <- head(sig_vars[order(-sig_vars$Odds_Ratio), ], 5)
 top5_cart <- head(var_imp_cart, 5)
 top5_rf <- head(var_imp_rf, 5)
+top5_xgb <- head(var_imp_xgb, 5)
 
 n_lr <- min(5, nrow(top5_lr))
 n_cart <- min(5, nrow(top5_cart))
 n_rf <- min(5, nrow(top5_rf))
+n_xgb <- min(5, nrow(top5_xgb))
 comparison_features <- data.frame(
   Rank = 1:5,
   Logistic_Regression = c(top5_lr$Variable[seq_len(n_lr)], rep("", max(0, 5-n_lr))),
   CART = c(top5_cart$Variable[seq_len(n_cart)], rep("", max(0, 5-n_cart))),
-  Random_Forest = c(top5_rf$Variable[seq_len(n_rf)], rep("", max(0, 5-n_rf)))
+  Random_Forest = c(top5_rf$Variable[seq_len(n_rf)], rep("", max(0, 5-n_rf))),
+  XGBoost = c(top5_xgb$Variable[seq_len(n_xgb)], rep("", max(0, 5-n_xgb))),
+  Neural_Network = rep("N/A", 5)  # Neural networks don't have direct variable importance
 )
 
-kable(comparison_features, caption = "Top 5 Most Important Predictors by Model", row.names = FALSE, align = "lccc") %>%
+kable(comparison_features, caption = "Top 5 Most Important Predictors by Model", row.names = FALSE, align = "lccccc") %>%
   kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
 
 cat("\n\n**Key Observations:**\n\n")
@@ -1061,7 +1314,9 @@ comparison_comprehensive <- data.frame(
   Metric = metrics_lr$Metric,
   Logistic_Regression = round(metrics_lr$Percentage, 2),
   CART = round(metrics_cart$Percentage, 2),
-  Random_Forest = round(metrics_rf$Percentage, 2)
+  Random_Forest = round(metrics_rf$Percentage, 2),
+  XGBoost = round(metrics_xgb$Percentage, 2),
+  Neural_Network = round(metrics_nn$Percentage, 2)
 )
 
 # Add AUC row
@@ -1070,7 +1325,9 @@ comparison_comprehensive <- rbind(comparison_comprehensive,
     Metric = "AUC",
     Logistic_Regression = round(auc_lr_value * 100, 2),
     CART = round(auc_cart_value * 100, 2),
-    Random_Forest = round(auc_rf_value * 100, 2)
+    Random_Forest = round(auc_rf_value * 100, 2),
+    XGBoost = round(auc_xgb$Value * 100, 2),
+    Neural_Network = round(auc_nn$Value * 100, 2)
   )
 )
 
@@ -1119,11 +1376,25 @@ justification_perf <- data.frame(
     paste0(round(metrics_rf$Percentage[metrics_rf$Metric == "Precision"], 2), "%"),
     paste0(round(metrics_rf$Percentage[metrics_rf$Metric == "Recall (Sensitivity)"], 2), "%"),
     paste0(round(metrics_rf$Percentage[metrics_rf$Metric == "F1-Score"], 2), "%")
+  ),
+  XGBoost = c(
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Accuracy"], 1), "%"),
+    paste0(round(auc_xgb$Value, 3)),
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Precision"], 2), "%"),
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Recall (Sensitivity)"], 2), "%"),
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "F1-Score"], 2), "%")
+  ),
+  Neural_Network = c(
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Accuracy"], 1), "%"),
+    paste0(round(auc_nn$Value, 3)),
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Precision"], 2), "%"),
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Recall (Sensitivity)"], 2), "%"),
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "F1-Score"], 2), "%")
   )
 )
 
 kable(justification_perf, caption = "Model Comparison: Performance Metrics", 
-      row.names = FALSE, align = "lccc") %>%
+      row.names = FALSE, align = "lccccc") %>%
   kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
 
 ## Interpretability and complexity
@@ -1144,11 +1415,21 @@ justification_qual <- data.frame(
     paste0("Low (ensemble of ", n_trees_rf, " trees)"),
     paste0("High (", n_trees_rf, " trees, complex ensemble)"),
     "Medium (variable importance, no p-values)"
+  ),
+  XGBoost = c(
+    paste0("Low (gradient boosting, ", best_iter_xgb, " iterations)"),
+    paste0("High (complex ensemble, ", best_iter_xgb, " trees)"),
+    "Low (variable importance only)"
+  ),
+  Neural_Network = c(
+    "Very Low (black box, no direct interpretation)",
+    paste0("Very High (", hidden_units_nn, " hidden units, complex weights)"),
+    "Very Low (no statistical tests, weights not interpretable)"
   )
 )
 
 kable(justification_qual, caption = "Model Comparison: Interpretability and Complexity", 
-      row.names = FALSE, align = "lccc") %>%
+      row.names = FALSE, align = "lccccc") %>%
   kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
 ```
 
@@ -1285,6 +1566,6 @@ Models using clinical data (lab values, vital signs) typically achieve higher AU
 
 # References
 
-Kaggle. "Diabetes 130-US Hospitals for 10 years." Accessed November 14, 2025. https://www.kaggle.com/datasets/brandao/diabetes
+Kaggle. "Diabetes 130-US Hospitals for 10 years." Accessed November 14, 2025. https://www.kaggle.com/datasets/dubradave/hospital-readmissions/data
 
 ---

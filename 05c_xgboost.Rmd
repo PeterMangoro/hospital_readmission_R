@@ -1,0 +1,278 @@
+---
+title: "Phase 5c: XGBoost Model"
+author: "Peter Mangoro"
+date: "2025-12-07"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Install xgboost if needed
+if (!require(xgboost)) {
+  install.packages("xgboost")
+  library(xgboost)
+}
+
+library(ggplot2)
+library(dplyr)
+library(pROC)
+library(caret)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 5c: XGBoost Model. We build an extreme gradient boosting model, analyze variable importance, and evaluate model performance.
+
+# Load Data
+
+```{r load-data, echo=FALSE, comment=""}
+load("data_cart.RData")
+cat("Dataset: ", nrow(data_cart), " observations, ", ncol(data_cart), " variables\n")
+```
+
+# Train/Test Split
+
+```{r train-test, echo=FALSE, comment=""}
+set.seed(1)
+train_indices <- createDataPartition(data_cart$readmitted, 
+                                     p = 0.7, 
+                                     list = FALSE)
+
+data_train_xgb <- data_cart[train_indices, ]
+data_test_xgb <- data_cart[-train_indices, ]
+
+cat("Training set: ", nrow(data_train_xgb), " observations (70%)\n")
+cat("Testing set: ", nrow(data_test_xgb), " observations (30%)\n")
+```
+
+# Data Preparation for XGBoost
+
+```{r prepare-data, echo=FALSE, comment=""}
+# XGBoost requires numeric matrix input
+# Convert factors to numeric codes
+data_train_xgb_numeric <- data_train_xgb
+data_test_xgb_numeric <- data_test_xgb
+
+# Convert factors to numeric codes (0-indexed)
+for(col in colnames(data_train_xgb_numeric)) {
+  if(is.factor(data_train_xgb_numeric[[col]])) {
+    if(col != "readmitted") {
+      data_train_xgb_numeric[[col]] <- as.numeric(data_train_xgb_numeric[[col]]) - 1
+      data_test_xgb_numeric[[col]] <- as.numeric(data_test_xgb_numeric[[col]]) - 1
+    }
+  }
+}
+
+# Separate features and target
+X_train <- as.matrix(data_train_xgb_numeric[, colnames(data_train_xgb_numeric) != "readmitted"])
+y_train <- as.numeric(data_train_xgb_numeric$readmitted == "Readmitted")
+X_test <- as.matrix(data_test_xgb_numeric[, colnames(data_test_xgb_numeric) != "readmitted"])
+y_test <- as.numeric(data_test_xgb_numeric$readmitted == "Readmitted")
+
+# Create DMatrix for XGBoost
+dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+dtest <- xgb.DMatrix(data = X_test, label = y_test)
+
+cat("Data prepared for XGBoost:\n")
+cat("  Training features: ", ncol(X_train), "\n")
+cat("  Training samples: ", nrow(X_train), "\n")
+cat("  Test samples: ", nrow(X_test), "\n")
+```
+
+# Build XGBoost Model
+
+```{r build-model, comment=""}
+# Set parameters
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "auc",
+  max_depth = 6,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8,
+  min_child_weight = 1
+)
+
+# Train model
+model_xgb <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 200,
+  evals = list(train = dtrain, test = dtest),
+  early_stopping_rounds = 20,
+  verbose = 1
+)
+
+cat("\nXGBoost model fitted successfully!\n")
+best_iter_val <- ifelse(is.null(model_xgb$best_iteration) || length(model_xgb$best_iteration) == 0, 
+                       200, as.numeric(model_xgb$best_iteration[1]))
+cat("Best iteration: ", best_iter_val, "\n")
+# Get best score from evaluation log
+if(!is.null(model_xgb$evaluation_log) && nrow(model_xgb$evaluation_log) > 0 && best_iter_val <= nrow(model_xgb$evaluation_log)) {
+  best_auc <- model_xgb$evaluation_log$test_auc[best_iter_val]
+  cat("Best AUC: ", round(best_auc, 4), "\n")
+} else {
+  cat("Model training completed\n")
+}
+```
+
+# Variable Importance
+
+```{r variable-importance, echo=FALSE, comment=""}
+# Extract variable importance
+importance_matrix <- xgb.importance(model = model_xgb, feature_names = colnames(X_train))
+
+# Convert to data frame
+var_importance_xgb_df <- data.frame(
+  Variable = importance_matrix$Feature,
+  Gain = importance_matrix$Gain,
+  Cover = importance_matrix$Cover,
+  Frequency = importance_matrix$Frequency
+)
+
+# Calculate percentage importance
+var_importance_xgb_df$Importance_Percent <- (var_importance_xgb_df$Gain / sum(var_importance_xgb_df$Gain)) * 100
+
+# Sort by importance
+var_importance_xgb_df <- var_importance_xgb_df %>%
+  arrange(desc(Importance_Percent))
+
+kable(head(var_importance_xgb_df, 10), caption = "XGBoost: Most Important Variables", row.names = FALSE, digits = 4)
+
+# Save importance table
+write.csv(var_importance_xgb_df, "plots/05c_variable_importance.csv", row.names = FALSE)
+
+# Create importance plot
+p_importance_xgb <- ggplot(head(var_importance_xgb_df, 10), 
+                          aes(x = reorder(Variable, Importance_Percent), 
+                              y = Importance_Percent)) +
+  geom_bar(stat = "identity", fill = "purple", alpha = 0.7) +
+  coord_flip() +
+  labs(title = "XGBoost: Variable Importance",
+       subtitle = "Most Important Variables (Gain-based)",
+       x = "Variable",
+       y = "Importance (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_importance_xgb)
+```
+
+# Model Evaluation
+
+```{r model-evaluation, echo=FALSE, comment=""}
+# Make predictions
+predictions_prob_xgb <- predict(model_xgb, newdata = dtest)
+predictions_class_xgb <- ifelse(predictions_prob_xgb > 0.5, "Readmitted", "Not_Readmitted")
+predictions_class_xgb <- factor(predictions_class_xgb, levels = c("Not_Readmitted", "Readmitted"))
+
+# Confusion Matrix
+conf_matrix_xgb <- table(Predicted = predictions_class_xgb, Actual = data_test_xgb$readmitted)
+kable(conf_matrix_xgb, caption = "XGBoost: Confusion Matrix", row.names = TRUE)
+
+# Calculate metrics - extract from confusion matrix
+TN_xgb <- conf_matrix_xgb[1, 1]  # Not_Readmitted, Not_Readmitted
+FP_xgb <- conf_matrix_xgb[2, 1]  # Readmitted, Not_Readmitted
+FN_xgb <- conf_matrix_xgb[1, 2]  # Not_Readmitted, Readmitted
+TP_xgb <- conf_matrix_xgb[2, 2]  # Readmitted, Readmitted
+
+accuracy_xgb <- as.numeric((TP_xgb + TN_xgb) / (TP_xgb + TN_xgb + FP_xgb + FN_xgb))
+precision_xgb <- as.numeric(TP_xgb / (TP_xgb + FP_xgb))
+recall_xgb <- as.numeric(TP_xgb / (TP_xgb + FN_xgb))
+specificity_xgb <- as.numeric(TN_xgb / (TN_xgb + FP_xgb))
+f1_score_xgb <- as.numeric(2 * (precision_xgb * recall_xgb) / (precision_xgb + recall_xgb))
+
+# Ensure all are single values
+accuracy_xgb <- accuracy_xgb[1]
+precision_xgb <- precision_xgb[1]
+recall_xgb <- recall_xgb[1]
+specificity_xgb <- specificity_xgb[1]
+f1_score_xgb <- f1_score_xgb[1]
+
+metrics_table_xgb <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall (Sensitivity)", "Specificity", "F1-Score"),
+  Value = c(accuracy_xgb, precision_xgb, recall_xgb, specificity_xgb, f1_score_xgb),
+  Percentage = c(accuracy_xgb * 100, precision_xgb * 100, recall_xgb * 100, 
+                 specificity_xgb * 100, f1_score_xgb * 100)
+)
+
+kable(metrics_table_xgb, caption = "XGBoost: Performance Metrics", digits = 2, row.names = FALSE)
+
+# Save metrics
+write.csv(metrics_table_xgb, "plots/05c_performance_metrics.csv", row.names = FALSE)
+
+# Save model metadata
+best_iter_val <- ifelse(is.null(model_xgb$best_iteration) || length(model_xgb$best_iteration) == 0, 
+                       200, as.numeric(model_xgb$best_iteration[1]))
+model_metadata_xgb <- data.frame(
+  Parameter = c("nrounds", "max_depth", "eta", "subsample", "colsample_bytree", "best_iteration"),
+  Value = c(200, 6, 0.1, 0.8, 0.8, best_iter_val),
+  stringsAsFactors = FALSE
+)
+write.csv(model_metadata_xgb, "plots/05c_model_metadata.csv", row.names = FALSE)
+```
+
+# ROC Curve
+
+```{r roc-curve, fig.cap="ROC Curve: XGBoost Model", echo=FALSE, comment=""}
+roc_obj_xgb <- roc(y_test, predictions_prob_xgb)
+auc_value_xgb <- auc(roc_obj_xgb)
+
+cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_xgb), 4), "\n")
+
+# Save AUC value
+auc_table_xgb <- data.frame(
+  Metric = "Area Under the Curve (AUC)",
+  Value = as.numeric(auc_value_xgb)
+)
+write.csv(auc_table_xgb, "plots/05c_auc.csv", row.names = FALSE)
+
+# Create ROC plot
+roc_data_xgb <- data.frame(
+  FPR = 1 - roc_obj_xgb$specificities,
+  TPR = roc_obj_xgb$sensitivities
+)
+
+p_roc_xgb <- ggplot(roc_data_xgb, aes(x = FPR, y = TPR)) +
+  geom_line(color = "purple", linewidth = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "ROC Curve: XGBoost Model",
+       subtitle = paste("AUC =", round(as.numeric(auc_value_xgb), 4)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_roc_xgb)
+```
+
+# Summary
+
+```{r summary, echo=FALSE, comment="", results='asis'}
+# Top predictor
+if(nrow(var_importance_xgb_df) > 0) {
+  top_predictor_xgb <- var_importance_xgb_df$Variable[1]
+  top_predictor_importance_xgb <- round(var_importance_xgb_df$Importance_Percent[1], 2)
+  top_predictor_display_xgb <- gsub("_", " ", top_predictor_xgb)
+} else {
+  top_predictor_display_xgb <- "N/A"
+  top_predictor_importance_xgb <- 0
+}
+
+cat("This phase successfully built and evaluated the XGBoost model:\n\n")
+cat("- **Accuracy**: ", round(accuracy_xgb * 100, 2), "%\n", sep = "")
+cat("- **AUC**: ", round(as.numeric(auc_value_xgb), 3), "\n", sep = "")
+cat("- **Best iteration**: ", model_xgb$best_iteration, "\n", sep = "")
+cat("- **Max depth**: 6\n")
+cat("- **Learning rate (eta)**: 0.1\n")
+cat("- **Top predictor**: ", top_predictor_display_xgb, " (", top_predictor_importance_xgb, "% importance)\n", sep = "")
+cat("- **Interpretability**: Lower (gradient boosting ensemble)\n")
+```
+

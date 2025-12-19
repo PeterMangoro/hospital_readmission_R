@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Data Cleaning and Preprocessing"
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-11-28"
 output: 
   pdf_document:

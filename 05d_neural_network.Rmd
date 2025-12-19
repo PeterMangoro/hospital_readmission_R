@@ -1,0 +1,228 @@
+---
+title: "Phase 5d: Neural Network Model"
+author: "Peter Mangoro"
+date: "2025-12-07"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Install nnet if needed
+if (!require(nnet)) {
+  install.packages("nnet")
+  library(nnet)
+}
+
+library(ggplot2)
+library(dplyr)
+library(pROC)
+library(caret)
+library(knitr)
+```
+
+# Introduction
+
+This document presents Phase 5d: Neural Network Model. We build a feedforward neural network model, analyze its architecture, and evaluate model performance.
+
+# Load Data
+
+```{r load-data, echo=FALSE, comment=""}
+load("data_cart.RData")
+cat("Dataset: ", nrow(data_cart), " observations, ", ncol(data_cart), " variables\n")
+```
+
+# Train/Test Split
+
+```{r train-test, echo=FALSE, comment=""}
+set.seed(1)
+train_indices <- createDataPartition(data_cart$readmitted, 
+                                     p = 0.7, 
+                                     list = FALSE)
+
+data_train_nn <- data_cart[train_indices, ]
+data_test_nn <- data_cart[-train_indices, ]
+
+cat("Training set: ", nrow(data_train_nn), " observations (70%)\n")
+cat("Testing set: ", nrow(data_test_nn), " observations (30%)\n")
+```
+
+# Data Preparation for Neural Network
+
+```{r prepare-data, echo=FALSE, comment=""}
+# Neural networks require all numeric inputs
+# Convert factors to dummy variables using model.matrix
+X_train_nn <- model.matrix(~ . - readmitted, data = data_train_nn)[, -1]  # Remove intercept
+X_test_nn <- model.matrix(~ . - readmitted, data = data_test_nn)[, -1]
+
+# Target variable (binary)
+y_train_nn <- as.numeric(data_train_nn$readmitted == "Readmitted")
+y_test_nn <- as.numeric(data_test_nn$readmitted == "Readmitted")
+
+# Scale features (important for neural networks)
+X_train_nn_scaled <- scale(X_train_nn)
+X_test_nn_scaled <- scale(X_test_nn, 
+                          center = attr(X_train_nn_scaled, "scaled:center"),
+                          scale = attr(X_train_nn_scaled, "scaled:scale"))
+
+# Store scaling parameters for later use
+scaling_params <- list(
+  center = attr(X_train_nn_scaled, "scaled:center"),
+  scale = attr(X_train_nn_scaled, "scaled:scale")
+)
+
+cat("Data prepared for Neural Network:\n")
+cat("  Training features: ", ncol(X_train_nn_scaled), "\n")
+cat("  Training samples: ", nrow(X_train_nn_scaled), "\n")
+cat("  Test samples: ", nrow(X_test_nn_scaled), "\n")
+cat("  Features scaled: Yes\n")
+```
+
+# Build Neural Network Model
+
+```{r build-model, comment=""}
+# Train neural network
+model_nn <- nnet(
+  x = X_train_nn_scaled,
+  y = y_train_nn,
+  size = 10,        # Number of hidden units
+  decay = 0.1,      # Weight decay (L2 regularization)
+  maxit = 200,      # Maximum iterations
+  trace = TRUE      # Print progress
+)
+
+cat("\nNeural Network model fitted successfully!\n")
+cat("Architecture: ", model_nn$n[1], " input units -> ", model_nn$n[2], 
+    " hidden units -> ", model_nn$n[3], " output unit\n", sep = "")
+cat("Total weights: ", length(model_nn$wts), "\n")
+cat("Convergence: ", ifelse(model_nn$convergence == 0, "Yes", "No"), "\n")
+```
+
+# Model Architecture
+
+```{r architecture, echo=FALSE, comment=""}
+architecture_table <- data.frame(
+  Layer = c("Input", "Hidden", "Output"),
+  Units = c(model_nn$n[1], model_nn$n[2], model_nn$n[3]),
+  Activation = c("Linear", "Sigmoid", "Sigmoid")
+)
+
+kable(architecture_table, caption = "Neural Network Architecture", row.names = FALSE)
+
+cat("\nModel Parameters:\n")
+cat("- Hidden units: ", model_nn$n[2], "\n")
+cat("- Weight decay: 0.1\n")
+cat("- Maximum iterations: 200\n")
+cat("- Actual iterations: ", model_nn$niter, "\n")
+```
+
+# Model Evaluation
+
+```{r model-evaluation, echo=FALSE, comment=""}
+# Make predictions
+predictions_prob_nn <- predict(model_nn, newdata = X_test_nn_scaled, type = "raw")
+predictions_class_nn <- ifelse(predictions_prob_nn > 0.5, "Readmitted", "Not_Readmitted")
+predictions_class_nn <- factor(predictions_class_nn, levels = c("Not_Readmitted", "Readmitted"))
+
+# Confusion Matrix
+conf_matrix_nn <- table(Predicted = predictions_class_nn, Actual = data_test_nn$readmitted)
+kable(conf_matrix_nn, caption = "Neural Network: Confusion Matrix", row.names = TRUE)
+
+# Calculate metrics - extract from confusion matrix
+TN_nn <- conf_matrix_nn[1, 1]  # Not_Readmitted, Not_Readmitted
+FP_nn <- conf_matrix_nn[2, 1]  # Readmitted, Not_Readmitted
+FN_nn <- conf_matrix_nn[1, 2]  # Not_Readmitted, Readmitted
+TP_nn <- conf_matrix_nn[2, 2]  # Readmitted, Readmitted
+
+accuracy_nn <- as.numeric((TP_nn + TN_nn) / (TP_nn + TN_nn + FP_nn + FN_nn))
+precision_nn <- as.numeric(TP_nn / (TP_nn + FP_nn))
+recall_nn <- as.numeric(TP_nn / (TP_nn + FN_nn))
+specificity_nn <- as.numeric(TN_nn / (TN_nn + FP_nn))
+f1_score_nn <- as.numeric(2 * (precision_nn * recall_nn) / (precision_nn + recall_nn))
+
+# Ensure all are single values
+accuracy_nn <- accuracy_nn[1]
+precision_nn <- precision_nn[1]
+recall_nn <- recall_nn[1]
+specificity_nn <- specificity_nn[1]
+f1_score_nn <- f1_score_nn[1]
+
+metrics_table_nn <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall (Sensitivity)", "Specificity", "F1-Score"),
+  Value = c(accuracy_nn, precision_nn, recall_nn, specificity_nn, f1_score_nn),
+  Percentage = c(accuracy_nn * 100, precision_nn * 100, recall_nn * 100, 
+                 specificity_nn * 100, f1_score_nn * 100)
+)
+
+kable(metrics_table_nn, caption = "Neural Network: Performance Metrics", digits = 2, row.names = FALSE)
+
+# Save metrics
+write.csv(metrics_table_nn, "plots/05d_performance_metrics.csv", row.names = FALSE)
+
+# Save model metadata
+niter_val <- ifelse(is.null(model_nn$niter) || length(model_nn$niter) == 0, 200, as.numeric(model_nn$niter[1]))
+model_metadata_nn <- data.frame(
+  Parameter = c("hidden_units", "decay", "maxit", "niter", "convergence"),
+  Value = c(as.numeric(model_nn$n[2]), 0.1, 200, niter_val, as.numeric(model_nn$convergence)),
+  stringsAsFactors = FALSE
+)
+write.csv(model_metadata_nn, "plots/05d_model_metadata.csv", row.names = FALSE)
+
+# Save scaling parameters (needed for predictions)
+save(scaling_params, file = "scaling_params_nn.RData")
+```
+
+# ROC Curve
+
+```{r roc-curve, fig.cap="ROC Curve: Neural Network Model", echo=FALSE, comment=""}
+roc_obj_nn <- roc(y_test_nn, as.vector(predictions_prob_nn))
+auc_value_nn <- auc(roc_obj_nn)
+
+cat("Area Under the Curve (AUC): ", round(as.numeric(auc_value_nn), 4), "\n")
+
+# Save AUC value
+auc_table_nn <- data.frame(
+  Metric = "Area Under the Curve (AUC)",
+  Value = as.numeric(auc_value_nn)
+)
+write.csv(auc_table_nn, "plots/05d_auc.csv", row.names = FALSE)
+
+# Create ROC plot
+roc_data_nn <- data.frame(
+  FPR = 1 - roc_obj_nn$specificities,
+  TPR = roc_obj_nn$sensitivities
+)
+
+p_roc_nn <- ggplot(roc_data_nn, aes(x = FPR, y = TPR)) +
+  geom_line(color = "darkorange", linewidth = 1.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", linewidth = 1) +
+  labs(title = "ROC Curve: Neural Network Model",
+       subtitle = paste("AUC =", round(as.numeric(auc_value_nn), 4)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12))
+print(p_roc_nn)
+```
+
+# Summary
+
+```{r summary, echo=FALSE, comment="", results='asis'}
+cat("This phase successfully built and evaluated the Neural Network model:\n\n")
+cat("- **Accuracy**: ", round(accuracy_nn * 100, 2), "%\n", sep = "")
+cat("- **AUC**: ", round(as.numeric(auc_value_nn), 3), "\n", sep = "")
+cat("- **Architecture**: ", model_nn$n[1], " input -> ", model_nn$n[2], 
+    " hidden -> ", model_nn$n[3], " output\n", sep = "")
+cat("- **Hidden units**: ", model_nn$n[2], "\n")
+cat("- **Weight decay**: 0.1\n")
+cat("- **Total weights**: ", length(model_nn$wts), "\n")
+cat("- **Convergence**: ", ifelse(model_nn$convergence == 0, "Yes", "No"), "\n")
+cat("- **Interpretability**: Very low (black box model)\n")
+```
+

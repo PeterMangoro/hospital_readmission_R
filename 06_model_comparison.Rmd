@@ -1,7 +1,7 @@
 ---
-title: "Phase 6: Model Comparison - Logistic Regression vs. CART"
-author: "Masheia Dzimba and Peter Mangoro"
-date: "2025-12-06"
+title: "Phase 6: Model Comparison - All Models"
+author: "Peter Mangoro"
+date: "2025-12-07"
 output: 
   pdf_document:
     toc: true
@@ -23,11 +23,12 @@ library(ggplot2)
 library(dplyr)
 library(pROC)
 library(knitr)
+library(caret)
 ```
 
 # Introduction
 
-This document presents Phase 6: Model Comparison. We compare the performance of Logistic Regression, CART, and Random Forest models, analyze their interpretability, and justify model selection.
+This document presents Phase 6: Model Comparison. We compare the performance of Logistic Regression, CART, Random Forest, XGBoost, and Neural Network models, analyze their interpretability, and justify model selection.
 
 # Load Results
 
@@ -36,33 +37,54 @@ This document presents Phase 6: Model Comparison. We compare the performance of 
 metrics_logistic <- read.csv("plots/04_performance_metrics.csv")
 metrics_cart <- read.csv("plots/05_performance_metrics.csv")
 metrics_rf <- read.csv("plots/05b_performance_metrics.csv")
+metrics_xgb <- read.csv("plots/05c_performance_metrics.csv")
+metrics_nn <- read.csv("plots/05d_performance_metrics.csv")
 
 auc_logistic <- read.csv("plots/04_auc.csv")
 auc_cart <- read.csv("plots/05_auc.csv")
 auc_rf <- read.csv("plots/05b_auc.csv")
+auc_xgb <- read.csv("plots/05c_auc.csv")
+auc_nn <- read.csv("plots/05d_auc.csv")
 
 regression_output <- read.csv("plots/04_regression_output.csv")
 var_importance_cart <- read.csv("plots/05_variable_importance.csv")
 var_importance_rf <- read.csv("plots/05b_variable_importance.csv")
+var_importance_xgb <- read.csv("plots/05c_variable_importance.csv")
 
-# Load Random Forest model metadata (if available)
+# Load model metadata (if available)
 if(file.exists("plots/05b_model_metadata.csv")) {
   model_metadata_rf <- read.csv("plots/05b_model_metadata.csv")
   n_trees_rf <- model_metadata_rf$Value[model_metadata_rf$Parameter == "ntree"]
 } else {
   n_trees_rf <- 500  # Default value
 }
+
+if(file.exists("plots/05c_model_metadata.csv")) {
+  model_metadata_xgb <- read.csv("plots/05c_model_metadata.csv")
+  best_iter_xgb <- model_metadata_xgb$Value[model_metadata_xgb$Parameter == "best_iteration"]
+} else {
+  best_iter_xgb <- 200  # Default value
+}
+
+if(file.exists("plots/05d_model_metadata.csv")) {
+  model_metadata_nn <- read.csv("plots/05d_model_metadata.csv")
+  hidden_units_nn <- model_metadata_nn$Value[model_metadata_nn$Parameter == "hidden_units"]
+} else {
+  hidden_units_nn <- 10  # Default value
+}
 ```
 
 # Performance Metrics Comparison
 
 ```{r performance-comparison, echo=FALSE, comment=""}
-# Create comparison table with all three models
+# Create comparison table with all five models
 comparison_table <- data.frame(
   Metric = metrics_logistic$Metric,
   Logistic_Regression = round(metrics_logistic$Percentage, 2),
   CART = round(metrics_cart$Percentage, 2),
-  Random_Forest = round(metrics_rf$Percentage, 2)
+  Random_Forest = round(metrics_rf$Percentage, 2),
+  XGBoost = round(metrics_xgb$Percentage, 2),
+  Neural_Network = round(metrics_nn$Percentage, 2)
 )
 
 # Add AUC row
@@ -71,11 +93,13 @@ comparison_table <- rbind(comparison_table,
     Metric = "AUC",
     Logistic_Regression = round(auc_logistic$Value * 100, 2),
     CART = round(auc_cart$Value * 100, 2),
-    Random_Forest = round(auc_rf$Value * 100, 2)
+    Random_Forest = round(auc_rf$Value * 100, 2),
+    XGBoost = round(auc_xgb$Value * 100, 2),
+    Neural_Network = round(auc_nn$Value * 100, 2)
   )
 )
 
-kable(comparison_table, caption = "Side-by-Side Performance Comparison", row.names = FALSE)
+kable(comparison_table, caption = "Side-by-Side Performance Comparison: All Five Models", row.names = FALSE)
 ```
 
 # Visualization
@@ -84,20 +108,28 @@ kable(comparison_table, caption = "Side-by-Side Performance Comparison", row.nam
 
 ```{r metrics-viz, fig.cap="Model Performance Comparison", echo=FALSE, comment=""}
 comparison_data <- data.frame(
-  Model = c("Logistic Regression", "CART", "Random Forest"),
-  AUC = c(auc_logistic$Value, auc_cart$Value, auc_rf$Value),
+  Model = c("Logistic Regression", "CART", "Random Forest", "XGBoost", "Neural Network"),
+  AUC = c(auc_logistic$Value, auc_cart$Value, auc_rf$Value, auc_xgb$Value, auc_nn$Value),
   Accuracy = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Accuracy"] / 100,
                metrics_cart$Percentage[metrics_cart$Metric == "Accuracy"] / 100,
-               metrics_rf$Percentage[metrics_rf$Metric == "Accuracy"] / 100),
+               metrics_rf$Percentage[metrics_rf$Metric == "Accuracy"] / 100,
+               metrics_xgb$Percentage[metrics_xgb$Metric == "Accuracy"] / 100,
+               metrics_nn$Percentage[metrics_nn$Metric == "Accuracy"] / 100),
   Precision = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Precision"] / 100,
                 metrics_cart$Percentage[metrics_cart$Metric == "Precision"] / 100,
-                metrics_rf$Percentage[metrics_rf$Metric == "Precision"] / 100),
+                metrics_rf$Percentage[metrics_rf$Metric == "Precision"] / 100,
+                metrics_xgb$Percentage[metrics_xgb$Metric == "Precision"] / 100,
+                metrics_nn$Percentage[metrics_nn$Metric == "Precision"] / 100),
   Recall = c(metrics_logistic$Percentage[metrics_logistic$Metric == "Recall (Sensitivity)"] / 100,
              metrics_cart$Percentage[metrics_cart$Metric == "Recall (Sensitivity)"] / 100,
-             metrics_rf$Percentage[metrics_rf$Metric == "Recall (Sensitivity)"] / 100),
+             metrics_rf$Percentage[metrics_rf$Metric == "Recall (Sensitivity)"] / 100,
+             metrics_xgb$Percentage[metrics_xgb$Metric == "Recall (Sensitivity)"] / 100,
+             metrics_nn$Percentage[metrics_nn$Metric == "Recall (Sensitivity)"] / 100),
   F1_Score = c(metrics_logistic$Value[metrics_logistic$Metric == "F1-Score"],
                metrics_cart$Value[metrics_cart$Metric == "F1-Score"],
-               metrics_rf$Value[metrics_rf$Metric == "F1-Score"])
+               metrics_rf$Value[metrics_rf$Metric == "F1-Score"],
+               metrics_xgb$Value[metrics_xgb$Metric == "F1-Score"],
+               metrics_nn$Value[metrics_nn$Metric == "F1-Score"])
 )
 
 comparison_long <- comparison_data %>%
@@ -110,7 +142,9 @@ p_metrics <- ggplot(comparison_long, aes(x = Metric, y = Value, fill = Model)) +
   geom_bar(stat = "identity", position = "dodge", alpha = 0.8) +
   scale_fill_manual(values = c("Logistic Regression" = "steelblue", 
                                "CART" = "lightcoral",
-                               "Random Forest" = "darkgreen")) +
+                               "Random Forest" = "darkgreen",
+                               "XGBoost" = "purple",
+                               "Neural Network" = "darkorange")) +
   labs(title = "Model Performance Comparison",
        subtitle = "Accuracy, Precision, Recall, and F1-Score",
        y = "Score",
@@ -118,27 +152,119 @@ p_metrics <- ggplot(comparison_long, aes(x = Metric, y = Value, fill = Model)) +
        fill = "Model") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-        plot.subtitle = element_text(hjust = 0.5, size = 12))
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        legend.position = "right")
 print(p_metrics)
 ```
 
 ## AUC Comparison
 
-```{r auc-comparison, fig.cap="AUC Comparison: Logistic Regression vs. CART", echo=FALSE,comment=""}
+```{r auc-comparison, fig.cap="AUC Comparison: All Five Models", echo=FALSE, comment=""}
 p_auc <- ggplot(comparison_data, aes(x = Model, y = AUC, fill = Model)) +
   geom_bar(stat = "identity", alpha = 0.7) +
   scale_fill_manual(values = c("Logistic Regression" = "steelblue", 
                                "CART" = "lightcoral",
-                               "Random Forest" = "darkgreen")) +
-  labs(title = "AUC Comparison: All Three Models",
+                               "Random Forest" = "darkgreen",
+                               "XGBoost" = "purple",
+                               "Neural Network" = "darkorange")) +
+  labs(title = "AUC Comparison: All Five Models",
        y = "Area Under the Curve (AUC)",
        x = "Model") +
-  geom_text(aes(label = round(AUC, 4)), vjust = -0.5, size = 5) +
+  geom_text(aes(label = round(AUC, 4)), vjust = -0.5, size = 4) +
   ylim(0, max(comparison_data$AUC) * 1.2) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none")
 print(p_auc)
+```
+
+## ROC Curves Comparison
+
+```{r roc-comparison, fig.cap="ROC Curves: All Five Models", echo=FALSE, comment=""}
+# Load test data and recreate predictions for all models
+load("data_logistic.RData")
+load("data_cart.RData")
+set.seed(1)
+
+# Logistic Regression
+train_indices_lr <- createDataPartition(data_logistic$readmitted, p = 0.7, list = FALSE)
+data_test_lr <- data_logistic[-train_indices_lr, ]
+load("model_logistic.RData")
+pred_lr <- predict(model_logistic, newdata = data_test_lr, type = "response")
+roc_lr <- roc(data_test_lr$readmitted, pred_lr)
+
+# CART
+train_indices_cart <- createDataPartition(data_cart$readmitted, p = 0.7, list = FALSE)
+data_test_cart <- data_cart[-train_indices_cart, ]
+load("model_cart_final.RData")
+pred_cart <- predict(model_cart_final, newdata = data_test_cart, type = "prob")[, "Readmitted"]
+actual_cart <- ifelse(data_test_cart$readmitted == "Readmitted", 1, 0)
+roc_cart <- roc(actual_cart, pred_cart)
+
+# Random Forest
+library(randomForest)
+load("model_rf.RData")
+pred_rf <- predict(model_rf, newdata = data_test_cart, type = "prob")[, "Readmitted"]
+roc_rf <- roc(actual_cart, pred_rf)
+
+# XGBoost
+library(xgboost)
+load("model_xgb.RData")
+# Prepare test data for XGBoost
+data_test_xgb_numeric <- data_test_cart
+for(col in colnames(data_test_xgb_numeric)) {
+  if(is.factor(data_test_xgb_numeric[[col]]) && col != "readmitted") {
+    data_test_xgb_numeric[[col]] <- as.numeric(data_test_xgb_numeric[[col]]) - 1
+  }
+}
+X_test_xgb <- as.matrix(data_test_xgb_numeric[, colnames(data_test_xgb_numeric) != "readmitted"])
+dtest_xgb <- xgb.DMatrix(data = X_test_xgb)
+pred_xgb <- predict(model_xgb, newdata = dtest_xgb)
+roc_xgb <- roc(actual_cart, pred_xgb)
+
+# Neural Network
+library(nnet)
+load("model_nn.RData")
+load("scaling_params_nn.RData")
+X_test_nn <- model.matrix(~ . - readmitted, data = data_test_cart)[, -1]
+X_test_nn_scaled <- scale(X_test_nn, 
+                          center = scaling_params$center,
+                          scale = scaling_params$scale)
+pred_nn <- predict(model_nn, newdata = X_test_nn_scaled, type = "raw")
+roc_nn <- roc(actual_cart, as.vector(pred_nn))
+
+# Combine ROC data
+roc_data_all <- rbind(
+  data.frame(FPR = 1 - roc_lr$specificities, TPR = roc_lr$sensitivities, Model = "Logistic Regression"),
+  data.frame(FPR = 1 - roc_cart$specificities, TPR = roc_cart$sensitivities, Model = "CART"),
+  data.frame(FPR = 1 - roc_rf$specificities, TPR = roc_rf$sensitivities, Model = "Random Forest"),
+  data.frame(FPR = 1 - roc_xgb$specificities, TPR = roc_xgb$sensitivities, Model = "XGBoost"),
+  data.frame(FPR = 1 - roc_nn$specificities, TPR = roc_nn$sensitivities, Model = "Neural Network")
+)
+
+p_roc_all <- ggplot(roc_data_all, aes(x = FPR, y = TPR, color = Model)) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray", linewidth = 1) +
+  scale_color_manual(values = c("Logistic Regression" = "steelblue",
+                                "CART" = "lightcoral",
+                                "Random Forest" = "darkgreen",
+                                "XGBoost" = "purple",
+                                "Neural Network" = "darkorange")) +
+  labs(title = "ROC Curves: All Five Models",
+       subtitle = paste0("AUC: LR=", round(auc_logistic$Value, 3), 
+                        ", CART=", round(auc_cart$Value, 3),
+                        ", RF=", round(auc_rf$Value, 3),
+                        ", XGB=", round(auc_xgb$Value, 3),
+                        ", NN=", round(auc_nn$Value, 3)),
+       x = "False Positive Rate (1 - Specificity)",
+       y = "True Positive Rate (Sensitivity)",
+       color = "Model") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        legend.position = "right")
+print(p_roc_all)
 ```
 
 # Interpretability Comparison
@@ -158,13 +284,28 @@ cat("- Top variable: ", var_importance_cart$Variable[1], " (",
     round(var_importance_cart$Importance_Percent[1], 2), "% importance)\n\n", sep = "")
 
 cat("**Random Forest:**\n\n")
-cat("- Ensemble of 500 decision trees\n\n")
+cat("- Ensemble of ", n_trees_rf, " decision trees\n\n", sep = "")
 cat("- Uses bootstrap sampling and feature randomization\n\n")
 cat("- ", nrow(var_importance_rf), " variables considered\n\n", sep = "")
 cat("- Lower interpretability (ensemble effect)\n\n")
 cat("- Non-linear relationships captured\n\n")
 cat("- Top variable: ", var_importance_rf$Variable[1], " (", 
-    round(var_importance_rf$Importance_Percent[1], 2), "% importance)\n", sep = "")
+    round(var_importance_rf$Importance_Percent[1], 2), "% importance)\n\n", sep = "")
+
+cat("**XGBoost:**\n\n")
+cat("- Gradient boosting ensemble with ", best_iter_xgb, " iterations\n\n", sep = "")
+cat("- ", nrow(var_importance_xgb), " variables considered\n\n", sep = "")
+cat("- Low interpretability (complex ensemble)\n\n")
+cat("- Handles non-linear relationships and feature interactions\n\n")
+cat("- Top variable: ", var_importance_xgb$Variable[1], " (", 
+    round(var_importance_xgb$Importance_Percent[1], 2), "% importance)\n\n", sep = "")
+
+cat("**Neural Network:**\n\n")
+cat("- Feedforward network with ", hidden_units_nn, " hidden units\n\n", sep = "")
+cat("- Very low interpretability (black box model)\n\n")
+cat("- Captures complex non-linear relationships\n\n")
+cat("- Requires feature scaling\n\n")
+cat("- No direct variable importance (weights are not easily interpretable)\n")
 ```
 
 # Model Selection
@@ -173,26 +314,44 @@ cat("- Top variable: ", var_importance_rf$Variable[1], " (",
 
 # Determine winner for each metric
 lr_wins <- sum(comparison_table$Logistic_Regression > comparison_table$CART & 
-               comparison_table$Logistic_Regression > comparison_table$Random_Forest, na.rm = TRUE)
+               comparison_table$Logistic_Regression > comparison_table$Random_Forest &
+               comparison_table$Logistic_Regression > comparison_table$XGBoost &
+               comparison_table$Logistic_Regression > comparison_table$Neural_Network, na.rm = TRUE)
 cart_wins <- sum(comparison_table$CART > comparison_table$Logistic_Regression & 
-                 comparison_table$CART > comparison_table$Random_Forest, na.rm = TRUE)
+                 comparison_table$CART > comparison_table$Random_Forest &
+                 comparison_table$CART > comparison_table$XGBoost &
+                 comparison_table$CART > comparison_table$Neural_Network, na.rm = TRUE)
 rf_wins <- sum(comparison_table$Random_Forest > comparison_table$Logistic_Regression & 
-               comparison_table$Random_Forest > comparison_table$CART, na.rm = TRUE)
+               comparison_table$Random_Forest > comparison_table$CART &
+               comparison_table$Random_Forest > comparison_table$XGBoost &
+               comparison_table$Random_Forest > comparison_table$Neural_Network, na.rm = TRUE)
+xgb_wins <- sum(comparison_table$XGBoost > comparison_table$Logistic_Regression & 
+                comparison_table$XGBoost > comparison_table$CART &
+                comparison_table$XGBoost > comparison_table$Random_Forest &
+                comparison_table$XGBoost > comparison_table$Neural_Network, na.rm = TRUE)
+nn_wins <- sum(comparison_table$Neural_Network > comparison_table$Logistic_Regression & 
+               comparison_table$Neural_Network > comparison_table$CART &
+               comparison_table$Neural_Network > comparison_table$Random_Forest &
+               comparison_table$Neural_Network > comparison_table$XGBoost, na.rm = TRUE)
 
 cat("Performance Metrics Won:\n")
 cat("  Logistic Regression: ", lr_wins, " metrics\n")
 cat("  CART: ", cart_wins, " metrics\n")
-cat("  Random Forest: ", rf_wins, " metrics\n\n")
+cat("  Random Forest: ", rf_wins, " metrics\n")
+cat("  XGBoost: ", xgb_wins, " metrics\n")
+cat("  Neural Network: ", nn_wins, " metrics\n\n")
 
 # Overall assessment - find best AUC and accuracy
-auc_values <- c(auc_logistic$Value, auc_cart$Value, auc_rf$Value)
-names(auc_values) <- c("Logistic Regression", "CART", "Random Forest")
+auc_values <- c(auc_logistic$Value, auc_cart$Value, auc_rf$Value, auc_xgb$Value, auc_nn$Value)
+names(auc_values) <- c("Logistic Regression", "CART", "Random Forest", "XGBoost", "Neural Network")
 best_auc_model <- names(auc_values)[which.max(auc_values)]
 
 acc_values <- c(metrics_logistic$Value[metrics_logistic$Metric == "Accuracy"],
                 metrics_cart$Value[metrics_cart$Metric == "Accuracy"],
-                metrics_rf$Value[metrics_rf$Metric == "Accuracy"])
-names(acc_values) <- c("Logistic Regression", "CART", "Random Forest")
+                metrics_rf$Value[metrics_rf$Metric == "Accuracy"],
+                metrics_xgb$Value[metrics_xgb$Metric == "Accuracy"],
+                metrics_nn$Value[metrics_nn$Metric == "Accuracy"])
+names(acc_values) <- c("Logistic Regression", "CART", "Random Forest", "XGBoost", "Neural Network")
 best_acc_model <- names(acc_values)[which.max(acc_values)]
 
 if(best_auc_model == best_acc_model) {
@@ -209,7 +368,7 @@ if(best_auc_model == best_acc_model) {
 cat("**Recommended Model: ", best_model, "**\n")
 cat("**Reason**: ", reason, "\n\n")
 
-# Create justification table directly (instead of reading from CSV)
+# Create justification table
 justification <- data.frame(
   Criterion = c("Accuracy", "AUC", "Precision", "Recall", "F1-Score", 
                 "Interpretability", "Complexity", "Statistical Rigor"),
@@ -242,6 +401,26 @@ justification <- data.frame(
     paste0("Low (ensemble of ", n_trees_rf, " trees)"),
     paste0("High (", n_trees_rf, " trees, complex ensemble)"),
     "Medium (variable importance, no p-values)"
+  ),
+  XGBoost = c(
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Accuracy"], 2), "%"),
+    paste0(round(auc_xgb$Value * 100, 2), "%"),
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Precision"], 2), "%"),
+    paste0(round(metrics_xgb$Percentage[metrics_xgb$Metric == "Recall (Sensitivity)"], 2), "%"),
+    round(metrics_xgb$Value[metrics_xgb$Metric == "F1-Score"], 4),
+    paste0("Low (gradient boosting, ", best_iter_xgb, " iterations)"),
+    paste0("High (complex ensemble, ", best_iter_xgb, " trees)"),
+    "Low (variable importance only)"
+  ),
+  Neural_Network = c(
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Accuracy"], 2), "%"),
+    paste0(round(auc_nn$Value * 100, 2), "%"),
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Precision"], 2), "%"),
+    paste0(round(metrics_nn$Percentage[metrics_nn$Metric == "Recall (Sensitivity)"], 2), "%"),
+    round(metrics_nn$Value[metrics_nn$Metric == "F1-Score"], 4),
+    "Very Low (black box, no direct interpretation)",
+    paste0("Very High (", hidden_units_nn, " hidden units, complex weights)"),
+    "Very Low (no statistical tests, weights not interpretable)"
   )
 )
 
@@ -255,15 +434,19 @@ kable(justification, caption = "Model Comparison: Detailed Justification", row.n
 # Calculate average accuracy
 avg_accuracy <- mean(c(metrics_logistic$Percentage[metrics_logistic$Metric == "Accuracy"],
                        metrics_cart$Percentage[metrics_cart$Metric == "Accuracy"],
-                       metrics_rf$Percentage[metrics_rf$Metric == "Accuracy"]))
+                       metrics_rf$Percentage[metrics_rf$Metric == "Accuracy"],
+                       metrics_xgb$Percentage[metrics_xgb$Metric == "Accuracy"],
+                       metrics_nn$Percentage[metrics_nn$Metric == "Accuracy"]))
 
 cat("1. **Performance:**\n")
-cat("   - All three models show similar performance (accuracy ~", round(avg_accuracy, 0), "%)\n", sep = "")
-cat("   - Best AUC: ", best_auc_model, " (", round(max(auc_logistic$Value, auc_cart$Value, auc_rf$Value), 3), ")\n", sep = "")
+cat("   - All five models show similar performance (accuracy ~", round(avg_accuracy, 0), "%)\n", sep = "")
+cat("   - Best AUC: ", best_auc_model, " (", round(max(auc_values), 3), ")\n", sep = "")
 cat("   - Logistic Regression: ", round(auc_logistic$Value, 3), 
     ", CART: ", round(auc_cart$Value, 3), 
-    ", Random Forest: ", round(auc_rf$Value, 3), "\n", sep = "")
-max_auc <- max(auc_logistic$Value, auc_cart$Value, auc_rf$Value)
+    ", Random Forest: ", round(auc_rf$Value, 3),
+    ", XGBoost: ", round(auc_xgb$Value, 3),
+    ", Neural Network: ", round(auc_nn$Value, 3), "\n", sep = "")
+max_auc <- max(auc_values)
 cat("   - All models have ", 
     ifelse(max_auc < 0.7, "fair to poor", "good"), 
     " discrimination (AUC < 0.7)\n\n")
@@ -272,9 +455,12 @@ cat("2. **Interpretability:**\n")
 n_cart_vars <- nrow(var_importance_cart)
 n_lr_params <- nrow(regression_output)
 n_rf_vars <- nrow(var_importance_rf)
+n_xgb_vars <- nrow(var_importance_xgb)
 cat("   - CART: Simplest (", n_cart_vars, " variables, single tree)\n", sep = "")
 cat("   - Logistic Regression: ", n_lr_params, " parameters, detailed statistical insights\n", sep = "")
-cat("   - Random Forest: Most complex (", n_trees_rf, " trees, ", n_rf_vars, " variables)\n", sep = "")
+cat("   - Random Forest: Complex (", n_trees_rf, " trees, ", n_rf_vars, " variables)\n", sep = "")
+cat("   - XGBoost: Complex (", best_iter_xgb, " iterations, ", n_xgb_vars, " variables)\n", sep = "")
+cat("   - Neural Network: Very complex (", hidden_units_nn, " hidden units, black box)\n", sep = "")
 cat("   - All models identify similar key predictors\n\n")
 
 cat("3. **Key Predictors:**\n")
@@ -285,25 +471,24 @@ cat("   - CART: ", var_importance_cart$Variable[1], " (",
     round(var_importance_cart$Importance_Percent[1], 2), "% importance)\n", sep = "")
 cat("   - Random Forest: ", var_importance_rf$Variable[1], " (", 
     round(var_importance_rf$Importance_Percent[1], 2), "% importance)\n", sep = "")
+cat("   - XGBoost: ", var_importance_xgb$Variable[1], " (", 
+    round(var_importance_xgb$Importance_Percent[1], 2), "% importance)\n", sep = "")
+cat("   - Neural Network: No direct variable importance (black box model)\n")
 ```
 
 # Summary
 
 ```{r summary, echo=FALSE, comment="", results='asis'}
-# Calculate summary statistics dynamically
-lr_wins_summary <- sum(comparison_table$Logistic_Regression > comparison_table$CART & 
-                       comparison_table$Logistic_Regression > comparison_table$Random_Forest, na.rm = TRUE)
-cart_wins_summary <- sum(comparison_table$CART > comparison_table$Logistic_Regression & 
-                         comparison_table$CART > comparison_table$Random_Forest, na.rm = TRUE)
-rf_wins_summary <- sum(comparison_table$Random_Forest > comparison_table$Logistic_Regression & 
-                       comparison_table$Random_Forest > comparison_table$CART, na.rm = TRUE)
 total_metrics <- nrow(comparison_table)
 
-cat("This phase compared all three models:\n\n")
-cat("- **Logistic Regression** wins ", lr_wins_summary, " out of ", total_metrics, " performance metrics\n", sep = "")
+cat("This phase compared all five models:\n\n")
+cat("- **Logistic Regression** wins ", lr_wins, " out of ", total_metrics, " performance metrics\n", sep = "")
 cat("- **CART** offers superior simplicity and interpretability\n")
-cat("- **Random Forest** wins ", rf_wins_summary, " out of ", total_metrics, " performance metrics\n", sep = "")
+cat("- **Random Forest** wins ", rf_wins, " out of ", total_metrics, " performance metrics\n", sep = "")
+cat("- **XGBoost** wins ", xgb_wins, " out of ", total_metrics, " performance metrics\n", sep = "")
+cat("- **Neural Network** wins ", nn_wins, " out of ", total_metrics, " performance metrics\n", sep = "")
 cat("- **Recommended**: ", best_model, " (", reason, ")\n", sep = "")
-cat("- All models identify **", var_importance_cart$Variable[1], "** as a key predictor\n", sep = "")
+cat("- All tree-based models identify **", var_importance_cart$Variable[1], "** as a key predictor\n", sep = "")
+cat("- Ensemble methods (RF, XGBoost) show similar performance\n")
+cat("- Neural Network provides alternative approach but with lowest interpretability\n")
 ```
-

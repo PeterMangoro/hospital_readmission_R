@@ -8,6 +8,8 @@ library(pROC)
 library(caret)
 library(rpart)
 library(randomForest)
+library(xgboost)
+library(nnet)
 library(DT)
 
 # Source helper functions
@@ -18,6 +20,8 @@ cat("Loading models...\n")
 load("model_logistic.RData")
 load("model_cart_final.RData")
 load("model_rf.RData")
+load("model_xgb.RData")
+load("model_nn.RData")
 cat("Models loaded successfully!\n")
 
 # Load data to get factor levels for dropdowns
@@ -28,9 +32,44 @@ factor_levels <- get_factor_levels()
 metrics_lr <- read.csv("plots/04_performance_metrics.csv", stringsAsFactors = FALSE)
 metrics_cart <- read.csv("plots/05_performance_metrics.csv", stringsAsFactors = FALSE)
 metrics_rf <- read.csv("plots/05b_performance_metrics.csv", stringsAsFactors = FALSE)
+metrics_xgb <- read.csv("plots/05c_performance_metrics.csv", stringsAsFactors = FALSE)
+metrics_nn <- read.csv("plots/05d_performance_metrics.csv", stringsAsFactors = FALSE)
 auc_lr <- read.csv("plots/04_auc.csv")
 auc_cart <- read.csv("plots/05_auc.csv")
 auc_rf <- read.csv("plots/05b_auc.csv")
+auc_xgb <- read.csv("plots/05c_auc.csv")
+auc_nn <- read.csv("plots/05d_auc.csv")
+
+# Determine best model based on AUC (primary metric)
+auc_values <- c(
+  "Logistic Regression" = auc_lr$Value,
+  "CART" = auc_cart$Value,
+  "Random Forest" = auc_rf$Value,
+  "XGBoost" = auc_xgb$Value,
+  "Neural Network" = auc_nn$Value
+)
+best_model_name <- names(auc_values)[which.max(auc_values)]
+best_auc_value <- max(auc_values)
+
+# Get accuracy for best model
+accuracy_values <- c(
+  "Logistic Regression" = metrics_lr$Value[metrics_lr$Metric == "Accuracy"],
+  "CART" = metrics_cart$Value[metrics_cart$Metric == "Accuracy"],
+  "Random Forest" = metrics_rf$Value[metrics_rf$Metric == "Accuracy"],
+  "XGBoost" = metrics_xgb$Value[metrics_xgb$Metric == "Accuracy"],
+  "Neural Network" = metrics_nn$Value[metrics_nn$Metric == "Accuracy"]
+)
+best_accuracy_value <- accuracy_values[best_model_name]
+
+# Reason for recommendation
+recommendation_reasons <- list(
+  "Logistic Regression" = "its combination of good predictive performance and detailed statistical insights (coefficients, odds ratios, p-values).",
+  "CART" = "its superior simplicity and interpretability with clear decision rules.",
+  "Random Forest" = "its robust ensemble predictions and variable importance insights.",
+  "XGBoost" = "its strong predictive performance through gradient boosting.",
+  "Neural Network" = "its ability to capture complex non-linear relationships."
+)
+best_model_reason <- recommendation_reasons[[best_model_name]]
 
 # ============================================================================
 # UI
@@ -81,7 +120,7 @@ ui <- fluidPage(
       h4("Demographics & Medical Info"),
       selectInput("age", "Age Group",
                   choices = factor_levels$age,
-                  selected = factor_levels$age[3]),
+                  selected = factor_levels$age[1]),
       selectInput("medical_specialty", "Medical Specialty",
                   choices = factor_levels$medical_specialty,
                   selected = "Missing"),
@@ -194,19 +233,25 @@ ui <- fluidPage(
                  
                  br(),
                  
-                 h3("Key Differences"),
-                 tags$ul(
-                   tags$li(tags$strong("Logistic Regression:"), 
-                          "Provides interpretable coefficients, odds ratios, and statistical significance testing. Best for understanding which factors drive readmission risk."),
-                   tags$li(tags$strong("CART:"), 
-                          "Offers simple decision rules and high interpretability. Best for clinical decision support with clear if-then rules."),
-                   tags$li(tags$strong("Random Forest:"), 
-                          "Combines multiple trees for robust predictions. Best for maximizing predictive performance while maintaining variable importance insights.")
-                 ),
+                h3("Key Differences"),
+                tags$ul(
+                  tags$li(tags$strong("Logistic Regression:"), 
+                         "Provides interpretable coefficients, odds ratios, and statistical significance testing. Best for understanding which factors drive readmission risk."),
+                  tags$li(tags$strong("CART:"), 
+                         "Offers simple decision rules and high interpretability. Best for clinical decision support with clear if-then rules."),
+                  tags$li(tags$strong("Random Forest:"), 
+                         "Combines multiple trees for robust predictions. Best for maximizing predictive performance while maintaining variable importance insights."),
+                  tags$li(tags$strong("XGBoost:"), 
+                         "Uses gradient boosting with regularization. Best for strong predictive performance through sequential error correction."),
+                  tags$li(tags$strong("Neural Network:"), 
+                         "Captures complex non-linear patterns. Best for handling intricate feature interactions, though with lower interpretability.")
+                ),
                  
-                 h3("Recommended Model"),
-                 p("Based on the analysis, ", tags$strong("Logistic Regression"), 
-                   " is recommended for clinical use due to its combination of good predictive performance and detailed statistical insights.")
+                h3("Recommended Model"),
+                p("Based on the analysis, ", tags$strong(best_model_name), 
+                  " is recommended for clinical use due to ", best_model_reason),
+                p("Performance: AUC = ", round(best_auc_value, 3), 
+                  ", Accuracy = ", round(best_accuracy_value * 100, 2), "%.", sep = "")
         ),
         
         # ====================================================================
@@ -216,7 +261,7 @@ ui <- fluidPage(
                  h2("About This Project"),
                  
                  h3("Project Overview"),
-                 p("This application predicts 30-day hospital readmission risk using three machine learning models trained on data from 130 US hospitals (1999-2008)."),
+                 p("This application predicts 30-day hospital readmission risk using five machine learning models trained on data from 130 US hospitals (1999-2008)."),
                  
                  h3("Models"),
                  tags$ul(
@@ -225,7 +270,11 @@ ui <- fluidPage(
                    tags$li(tags$strong("CART (Classification and Regression Trees):"), 
                           "A decision tree model that creates simple, interpretable rules."),
                    tags$li(tags$strong("Random Forest:"), 
-                          "An ensemble method that combines multiple decision trees for improved predictions.")
+                          "An ensemble method that combines multiple decision trees for improved predictions."),
+                   tags$li(tags$strong("XGBoost:"), 
+                          "An advanced gradient boosting method that sequentially builds decision trees."),
+                   tags$li(tags$strong("Neural Network:"), 
+                          "A feedforward neural network that captures complex non-linear relationships.")
                  ),
                  
                  h3("Dataset"),
@@ -236,7 +285,7 @@ ui <- fluidPage(
                  p("Previous hospital visits, number of diagnoses, medical specialty, and age are among the most important predictors of readmission."),
                  
                  h3("Authors"),
-                 p("Masheia Dzimba and Peter Mangoro"),
+                 p(" Peter Mangoro"),
                  
                  h3("Full Report"),
                  p("For detailed methodology, results, and analysis, please refer to the comprehensive project report (PROJECT_REPORT.pdf)."),
@@ -283,22 +332,35 @@ server <- function(input, output, session) {
       # Encode inputs for each model
       data_lr <- encode_for_logistic(inputs)
       data_cart <- encode_for_cart(inputs)
+      data_xgb <- encode_for_xgb(inputs)
+      data_nn <- encode_for_nn(inputs)
       
       # Make predictions
       pred_lr <- predict(model_logistic, newdata = data_lr, type = "response")
       pred_cart <- predict(model_cart_final, newdata = data_cart, type = "prob")[, "Readmitted"]
       pred_rf <- predict(model_rf, newdata = data_cart, type = "prob")[, "Readmitted"]
       
+      # XGBoost prediction
+      dtest_xgb <- xgb.DMatrix(data = data_xgb)
+      pred_xgb <- predict(model_xgb, newdata = dtest_xgb)
+      
+      # Neural Network prediction
+      pred_nn <- predict(model_nn, newdata = data_nn, type = "raw")
+      
       return(list(
         lr = as.numeric(pred_lr),
         cart = as.numeric(pred_cart),
-        rf = as.numeric(pred_rf)
+        rf = as.numeric(pred_rf),
+        xgb = as.numeric(pred_xgb),
+        nn = as.numeric(pred_nn)
       ))
     }, error = function(e) {
       return(list(
         lr = NA,
         cart = NA,
         rf = NA,
+        xgb = NA,
+        nn = NA,
         error = e$message
       ))
     })
@@ -312,7 +374,7 @@ server <- function(input, output, session) {
     if(any(is.na(preds))) {
       return("Error: Unable to make prediction. Please check inputs.")
     }
-    avg_prob <- mean(c(preds$lr, preds$cart, preds$rf))
+    avg_prob <- mean(c(preds$lr, preds$cart, preds$rf, preds$xgb, preds$nn), na.rm = TRUE)
     paste0(round(avg_prob * 100, 2), "%")
   })
   
@@ -323,7 +385,7 @@ server <- function(input, output, session) {
     if(any(is.na(preds))) {
       return("Error")
     }
-    avg_prob <- mean(c(preds$lr, preds$cart, preds$rf))
+    avg_prob <- mean(c(preds$lr, preds$cart, preds$rf, preds$xgb, preds$nn), na.rm = TRUE)
     
     risk_class <- if(avg_prob < 0.3) {
       "Low Risk"
@@ -340,7 +402,7 @@ server <- function(input, output, session) {
   observe({
     preds <- make_predictions()
     if(!any(is.na(preds))) {
-      avg_prob <- mean(c(preds$lr, preds$cart, preds$rf))
+      avg_prob <- mean(c(preds$lr, preds$cart, preds$rf, preds$xgb, preds$nn), na.rm = TRUE)
       class_name <- if(avg_prob < 0.3) {
         "risk-low"
       } else if(avg_prob < 0.6) {
@@ -361,8 +423,8 @@ server <- function(input, output, session) {
     }
     
     data.frame(
-      Model = c("Logistic Regression", "CART", "Random Forest"),
-      Probability = paste0(round(c(preds$lr, preds$cart, preds$rf) * 100, 2), "%"),
+      Model = c("Logistic Regression", "CART", "Random Forest", "XGBoost", "Neural Network"),
+      Probability = paste0(round(c(preds$lr, preds$cart, preds$rf, preds$xgb, preds$nn) * 100, 2), "%"),
       stringsAsFactors = FALSE
     )
   }, digits = 2)
@@ -376,13 +438,13 @@ server <- function(input, output, session) {
     }
     
     prob_df <- data.frame(
-      Model = c("Logistic\nRegression", "CART", "Random\nForest"),
-      Probability = c(preds$lr, preds$cart, preds$rf)
+      Model = c("Logistic\nRegression", "CART", "Random\nForest", "XGBoost", "Neural\nNetwork"),
+      Probability = c(preds$lr, preds$cart, preds$rf, preds$xgb, preds$nn)
     )
     
     ggplot(prob_df, aes(x = Model, y = Probability, fill = Model)) +
       geom_bar(stat = "identity", alpha = 0.7) +
-      scale_fill_manual(values = c("steelblue", "orange", "darkgreen")) +
+      scale_fill_manual(values = c("steelblue", "orange", "darkgreen", "purple", "darkorange")) +
       scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1)) +
       labs(title = "Readmission Probability by Model",
            y = "Probability",
@@ -424,6 +486,29 @@ server <- function(input, output, session) {
       roc_rf <- roc(actual_cart, pred_rf)
       auc_rf_val <- as.numeric(auc(roc_rf))
       
+      # XGBoost
+      data_test_xgb_numeric <- data_test_cart
+      for(col in colnames(data_test_xgb_numeric)) {
+        if(is.factor(data_test_xgb_numeric[[col]]) && col != "readmitted") {
+          data_test_xgb_numeric[[col]] <- as.numeric(data_test_xgb_numeric[[col]]) - 1
+        }
+      }
+      X_test_xgb <- as.matrix(data_test_xgb_numeric[, colnames(data_test_xgb_numeric) != "readmitted"])
+      dtest_xgb <- xgb.DMatrix(data = X_test_xgb)
+      pred_xgb <- predict(model_xgb, newdata = dtest_xgb)
+      roc_xgb <- roc(actual_cart, pred_xgb)
+      auc_xgb_val <- as.numeric(auc(roc_xgb))
+      
+      # Neural Network
+      load("scaling_params_nn.RData")
+      X_test_nn <- model.matrix(~ . - readmitted, data = data_test_cart)[, -1]
+      X_test_nn_scaled <- scale(X_test_nn, 
+                                center = scaling_params$center,
+                                scale = scaling_params$scale)
+      pred_nn <- predict(model_nn, newdata = X_test_nn_scaled, type = "raw")
+      roc_nn <- roc(actual_cart, as.vector(pred_nn))
+      auc_nn_val <- as.numeric(auc(roc_nn))
+      
       # Create combined ROC data
       roc_data <- rbind(
         data.frame(
@@ -443,6 +528,18 @@ server <- function(input, output, session) {
           TPR = roc_rf$sensitivities,
           Model = "Random Forest",
           AUC = auc_rf_val
+        ),
+        data.frame(
+          FPR = 1 - roc_xgb$specificities,
+          TPR = roc_xgb$sensitivities,
+          Model = "XGBoost",
+          AUC = auc_xgb_val
+        ),
+        data.frame(
+          FPR = 1 - roc_nn$specificities,
+          TPR = roc_nn$sensitivities,
+          Model = "Neural Network",
+          AUC = auc_nn_val
         )
       )
       
@@ -452,11 +549,15 @@ server <- function(input, output, session) {
         geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray", linewidth = 1) +
         scale_color_manual(values = c("Logistic Regression" = "steelblue",
                                       "CART" = "orange",
-                                      "Random Forest" = "darkgreen")) +
+                                      "Random Forest" = "darkgreen",
+                                      "XGBoost" = "purple",
+                                      "Neural Network" = "darkorange")) +
         labs(title = "ROC Curves: Model Comparison",
              subtitle = paste0("AUC: LR = ", round(auc_lr_val, 3), 
                               ", CART = ", round(auc_cart_val, 3),
-                              ", RF = ", round(auc_rf_val, 3)),
+                              ", RF = ", round(auc_rf_val, 3),
+                              ", XGB = ", round(auc_xgb_val, 3),
+                              ", NN = ", round(auc_nn_val, 3)),
              x = "False Positive Rate (1 - Specificity)",
              y = "True Positive Rate (Sensitivity)",
              color = "Model") +
@@ -536,7 +637,9 @@ server <- function(input, output, session) {
     all_metrics <- rbind(
       cbind(Model = "Logistic Regression", metrics_lr),
       cbind(Model = "CART", metrics_cart),
-      cbind(Model = "Random Forest", metrics_rf)
+      cbind(Model = "Random Forest", metrics_rf),
+      cbind(Model = "XGBoost", metrics_xgb),
+      cbind(Model = "Neural Network", metrics_nn)
     )
     DT::datatable(all_metrics, options = list(pageLength = 15))
   })
@@ -547,7 +650,9 @@ server <- function(input, output, session) {
       Metric = metrics_lr$Metric,
       Logistic_Regression = paste0(round(metrics_lr$Percentage, 2), "%"),
       CART = paste0(round(metrics_cart$Percentage, 2), "%"),
-      Random_Forest = paste0(round(metrics_rf$Percentage, 2), "%")
+      Random_Forest = paste0(round(metrics_rf$Percentage, 2), "%"),
+      XGBoost = paste0(round(metrics_xgb$Percentage, 2), "%"),
+      Neural_Network = paste0(round(metrics_nn$Percentage, 2), "%")
     )
     
     # Add AUC row
@@ -556,7 +661,9 @@ server <- function(input, output, session) {
         Metric = "AUC",
         Logistic_Regression = as.character(round(auc_lr$Value, 3)),
         CART = as.character(round(auc_cart$Value, 3)),
-        Random_Forest = as.character(round(auc_rf$Value, 3))
+        Random_Forest = as.character(round(auc_rf$Value, 3)),
+        XGBoost = as.character(round(auc_xgb$Value, 3)),
+        Neural_Network = as.character(round(auc_nn$Value, 3))
       )
     )
     
@@ -566,13 +673,13 @@ server <- function(input, output, session) {
   # AUC comparison plot
   output$auc_comparison <- renderPlot({
     auc_df <- data.frame(
-      Model = c("Logistic Regression", "CART", "Random Forest"),
-      AUC = c(auc_lr$Value, auc_cart$Value, auc_rf$Value)
+      Model = c("Logistic Regression", "CART", "Random Forest", "XGBoost", "Neural Network"),
+      AUC = c(auc_lr$Value, auc_cart$Value, auc_rf$Value, auc_xgb$Value, auc_nn$Value)
     )
     
     ggplot(auc_df, aes(x = Model, y = AUC, fill = Model)) +
       geom_bar(stat = "identity", alpha = 0.7) +
-      scale_fill_manual(values = c("steelblue", "orange", "darkgreen")) +
+      scale_fill_manual(values = c("steelblue", "orange", "darkgreen", "purple", "darkorange")) +
       scale_y_continuous(limits = c(0, 1)) +
       labs(title = "AUC Comparison Across Models",
            y = "Area Under the Curve (AUC)",

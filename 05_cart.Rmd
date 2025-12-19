@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: CART (Classification and Regression Trees) Model"
-author: "Masheia Dzimba and Peter Mangoro"
+author: " Peter Mangoro"
 date: "2025-12-04"
 output: 
   pdf_document:
