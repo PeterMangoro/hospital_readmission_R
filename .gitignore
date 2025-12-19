@@ -1,0 +1,47 @@
+# R Markdown outputs
+*.pdf
+*.html
+*.log
+
+# R Data files
+*.RData
+*.rda
+*.rds
+
+# Model files
+*.model
+
+# Document outputs
+*.docx
+*.doc
+*.rtf
+*.odt
+
+# RStudio files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Shiny deployment files
+rsconnect/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Archive directories (if not needed)
+# archive/
+
+# Generated CSV outputs (in plots/ directory)
+plots/*.csv
+
+# Large source data files (uncomment if you don't want to track large CSVs)
+# Uncomment the line below if you want to ignore source data files
+# *.csv
+
